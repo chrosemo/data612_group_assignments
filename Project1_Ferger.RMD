@@ -18,9 +18,10 @@ library(tidyverse)
 
 ```
 
+### Load Data, develop base set
 ```{r}
 
-rawData <- data.frame(read.csv("https://raw.githubusercontent.com/chrosemo/data612_group_assignments/master/ratings_small.csv?token=AA64OBTS4PXWKTWOBCQAUSC63AXWQ"))
+rawData <- data.frame(read.csv("ratings_small.csv"))
 
 # top 10 movies
 top10 <- rawData %>%
@@ -30,10 +31,10 @@ top10 <- rawData %>%
   mutate(RECORD_ID = as.numeric(rownames(.))) %>%
   filter(RECORD_ID <= 10)
 
-# join top 10 movies to users
+# all users that have at least 1 of the top 10 movies
 dataSubset <- inner_join(rawData, top10, by=c('movieId'='movieId'))
 
-# final Samples
+# user IDs to be used in final dataset
 sampledData <- dataSubset %>%
   group_by(userId) %>%
   summarize(MOVIE_COUNT = n()) %>%
@@ -41,9 +42,28 @@ sampledData <- dataSubset %>%
   group_by(MOVIE_COUNT) %>% 
   sample_n(2)
 
+# final data set in long format
 finalData <- inner_join(dataSubset, sampledData, by=c("userId" = "userId")) %>%
   select(userId,movieId,rating)
 
+# final data matrix
 finalData.df <- spread(finalData,movieId,rating)
+head(finalData.df)
+
+```
+
+### Split Data into Training and Test
+
+```{r}
+
+# gather data -- long format
+allValues <- gather(finalData.df,movieId,rating, -userId)
+
+testSet <- allValues %>%
+  filter(!is.na(rating)) %>% # do not include nulls
+  group_by(userId) %>%
+  sample_n(1)
+
+trainingSet <- anti_join(allValues, testSet, by=c('userId'='userId', 'movieId'='movieId')) 
 
 ```
