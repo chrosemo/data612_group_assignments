@@ -112,7 +112,7 @@ testRMSE<-  RMSE(testSet$rating,raw_avg)
 testRMSE
 ```
 
-In both cases the RMSE is high. It is even more higher in the test set.
+In both cases the RMSE is high. It is especially higher in the test set.
 
 # Bias Calculation
 
