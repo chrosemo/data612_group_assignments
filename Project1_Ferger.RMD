@@ -1,22 +1,38 @@
 ---
 title: 'DATA 612: Project 1 | Global Baseline Predictors and RMSE'
-author: "Amber Ferger"
+author: "Amber Ferger, Charlie H, Juanelle Marks" 
 date: "6/3/2020"
-output: html_document
+output: 
+    html_document:
+     theme: lumen
+     highlight: tango
+     toc: TRUE
+    
 ---
 
+# Introduction
 
 In this first assignment, we’ll attempt to predict ratings with very little information. We’ll first look at just raw averages across all (training dataset) users. We’ll then account for “bias” by normalizing across users and across items.  
   
-You’ll be working with ratings in a user-item matrix, where each rating may be (1) assigned to a training dataset, (2) assigned to a test dataset, or (3) missing.
+We'll be working with ratings in a user-item matrix, where each rating may be (1) assigned to a training dataset, (2) assigned to a test dataset, or (3) missing.
+
+# Data Source
+The data was sourced from: https://www.kaggle.com/rounakbanik/the-movies-dataset?select=ratings_small.csv
+The data set contains 100 ratings from 700 users. It constitutes  a subset of the ratings available in the Full MovieLens dataset. Ratings are on the scale 1 to 5. For the purspose of this project, we extracted a 10 X 10 subset of the dataframe.
+
 
 
 ### Load Libraries
-```{r, message=FALSE}
-
+```{r message=FALSE, include=FALSE}
 library(tidyverse)
+library(pander)
+library(knitr)
+library(dplyr)
 
 ```
+
+
+# Data Processing
 
 ### Load Data, develop base set
 ```{r}
@@ -66,4 +82,49 @@ testSet <- allValues %>%
 
 trainingSet <- anti_join(allValues, testSet, by=c('userId'='userId', 'movieId'='movieId')) 
 
+head(trainingSet)
+#head(testSet)
+
 ```
+
+# Raw average and RMSE
+
+### Raw Average
+```{r}
+#take the mean of the  training dataset; every entry gets the same prediction
+raw_avg <- mean(trainingSet$rating, na.rm =TRUE)
+raw_avg
+```
+
+### RMSE-training set
+```{r}
+RMSE = function(data, data_avg){ 
+  sqrt(mean((data - data_avg)^2, na.rm =TRUE)) 
+}
+
+trainRMSE <-  RMSE(trainingSet$rating,raw_avg )
+trainRMSE
+```
+
+### RMSE-test set
+```{r}
+testRMSE<-  RMSE(testSet$rating,raw_avg)
+testRMSE
+```
+
+In both cases the RMSE is high. It is even more higher in the test set.
+
+# Bias Calculation
+
+```{r}
+train_matrix<- spread(trainingSet,movieId,rating)# to get bias by user and item in the tainning set
+user_bias <- rowMeans(train_matrix, na.rm =TRUE) - raw_avg
+item_bias <- colMeans(train_matrix[-1], na.rm =TRUE) - raw_avg # remove first column with user id
+
+#Show information on separate tables
+```
+
+
+# Baseline Predictors for each user-item combination
+
+
