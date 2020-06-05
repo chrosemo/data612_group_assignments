@@ -128,8 +128,7 @@ item_bias <- colMeans(train_matrix, na.rm = TRUE) - raw_avg
 # Baseline Predictors for each user-item combination
 ```{r}
 # Applying baseline predictor function to each user-item combination
-blp <- function(x,y) x + y + raw_avg
-baseline_predictor <- data.frame(sapply(1:10, function(i) sapply(1:10, function(j) blp(user_bias[i], item_bias[j]))), row.names = rownames(train_matrix))
+
 names(baseline_predictor) <- names(train_matrix)
 # Clipping any values greater than 5
 baseline_predictor[baseline_predictor > 5] <- 5
