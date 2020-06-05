@@ -117,9 +117,9 @@ In both cases the RMSE is high. It is especially higher in the test set.
 # Bias Calculation
 
 ```{r}
-train_matrix<- spread(trainingSet,movieId,rating)# to get bias by user and item in the tainning set
-user_bias <- rowMeans(train_matrix, na.rm =TRUE) - raw_avg
-item_bias <- colMeans(train_matrix[-1], na.rm =TRUE) - raw_avg # remove first column with user id
+train_matrix <- trainingSet %>% spread(movieId, rating) %>% column_to_rownames(var = "userId")
+user_bias <- rowMeans(train_matrix, na.rm = TRUE) - raw_avg
+item_bias <- colMeans(train_matrix, na.rm = TRUE) - raw_avg
 
 #Show information on separate tables
 ```
