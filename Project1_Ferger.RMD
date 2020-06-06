@@ -190,14 +190,13 @@ However, our results show otherwise -- when incorporating bias into the predicti
 
 ```{r}
 # actual value
-test_matrix[5,2]
+test_matrix[4,5]
 
 # predicted value
-baseline_predictor_test[5,2]
+baseline_predictor_test[4,5]
 
 # error
-RMSE(test_matrix[5,2], baseline_predictor_test[5,2])
-
+RMSE(test_matrix[4,5], baseline_predictor_test[4,5])
 ```
 We can see that the error from this user-item pairing is particularly high because the actual value and prediction are very different. If this were a recommendation system, the user would probably not be happy with the recommendation.  
   
