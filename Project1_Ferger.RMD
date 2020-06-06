@@ -1,6 +1,6 @@
 ---
 title: 'DATA 612: Project 1 | Global Baseline Predictors and RMSE'
-author: "Amber Ferger, Charlie H, Juanelle Marks" 
+author: "Amber Ferger, Charlie Rosemond, Juanelle Marks" 
 date: "6/3/2020"
 output: 
     html_document:
