@@ -1,0 +1,153 @@
+---
+title: 'DATA 612: Project 2 | CONTENT BASED AND COLLABORATIVE FILTERING'
+author: "Amber Ferger, Charlie Rosemond, Juanelle Marks" 
+date: "6/9/2020"
+output: 
+    html_document:
+     theme: lumen
+     highlight: tango
+     toc: TRUE
+    
+---
+
+# Project Instructions
+
+The goal of this assignment is for you to try out different ways of implementing and configuring a recommender, and to evaluate your different approaches.For assignment 2, start with an existing dataset of user-item ratings, such MovieLens. Implement at least two of these recommendation algorithms:
+• Content-Based Filtering
+• User-User Collaborative Filtering
+• Item-Item Collaborative Filtering
+
+You should evaluate and compare different approaches, using different algorithms, normalization techniques, similarity methods, neighborhood sizes, etc. You don’t need to be exhaustive—these are just some suggested possibilities.
+
+You may use the course text’s recommenderlab or any other library that you want. Please provide at least one graph, and a textual summary of your findings and recommendations.
+
+# Introduction
+In this project we will use the built in MovieLense dataset from the recommenderlab .We will implement and compare all the recommendation algorithms given the  project instructions.
+
+## Data Source
+
+?
+
+## Motivation
+
+This system will  ? 
+
+
+
+```{r message=FALSE, include=FALSE}
+# load libraries
+library(tidyverse)
+library(pander)
+library(knitr)
+library(dplyr)
+library(recommenderlab)
+
+```
+
+
+### Load data
+```{r}
+set.seed(200)
+data("MovieLense")
+movielense <- MovieLense@data
+
+```
+
+# Explore Data set
+
+With reference to code by (Hahsler, 2019), we did some exploration of the dataset so that we get get a sense of the how rating are distributed according to user and item.This will inform how we will subset the data for modeling.
+
+
+### Distribution of ratings by user and item
+```{r}
+## number of ratings per user using base R
+hist(rowCounts(MovieLense))
+```
+
+The visualisation above shows that the distribution of ratings by users in the Movielense dataset is severely  right skewed.
+
+```{r}
+## number of ratings per movie using base R
+hist(colCounts(MovieLense))
+```
+
+The visualisation above shows that the distribution of ratings by item in the Movielense dataset is also severely  right skewed.
+
+Given the skewedness in both these distributions, it is obvious that there is a lot os sparsity in the dataset.
+
+### Overall distribution of ratings
+```{r}
+# Visualise the distribution of ratings in this dataset
+movielense %>% 
+  as.vector() %>% 
+  as_tibble() %>% 
+  filter_all(any_vars(. != 0)) %>% 
+  ggplot(aes(value)) + 
+  geom_bar(fill = 'red') +
+  labs(title = " Overall Distribution of Ratings", y = "", x = "Ratings") +
+  theme_minimal()
+```
+The overall distribution of ratings is slightly left skewed. The mean rating  is confirmed below:
+
+```{r}
+## mean rating (averaged over users)
+mean(rowMeans(MovieLense))
+```
+
+### View of meta data and heatmap of ratings
+The format of MovieLenseMeta is a data.frame with movie title, year, IMDb URL and indicator variables for 19 genres. See below view of meta data
+```{r}
+
+# View the meta data:
+movie_meta <- MovieLenseMeta
+pander(head(movie_meta), caption = "Sample Movie Meta Data")
+```
+
+
+
+```{r}
+image(movielense, main = "Heatmap of the rating matrix")
+```
+
+# Prepare Data For Modeling
+
+It is obvious that there is much sparsity in the dataset.There are many cases where users that might not have rated any movies many movies which may not have been rated In order to have a  healthy baseline on which to our  build recommendation models, we will take into consideration those users who have rated at least 50 movies and those movies that are rated b atleast 100 users. We will then split the data into train and test sets.
+
+```{r}
+
+most_rated <- MovieLense[rowCounts(MovieLense) > 50, colCounts(MovieLense) > 100]
+
+# split the dataset into test set and train set
+which_train <- sample(x = c(TRUE, FALSE), size = nrow(most_rated), replace = TRUE, prob = c(0.8, 0.2))
+train_set <- most_rated[which_train, ]
+test_set <- most_rated[!which_train, ]
+
+```
+
+
+
+# Recommendation Algorithm: Content Based Filtering
+Content-based filtering: This is for each user; it defines a user profile and identify the items that match it.
+
+Collaborative filtering: This is the branch of techniques that we will explore in detail. The algorithms are based on information about similar users or
+similar items. The two sub-branches are as follows:
+° Item-based collaborative filtering: This recommends to a user the items that are most similar to the user's purchases
+° User-based collaborative filtering: This recommends to a user the items that are the most preferred by similar users
+
+# Recommendation Algorithm: User-User Collaborative Filtering
+
+Collaborative filtering algorithms are based on measuring the similarity between users or between items. For this purpose, recommenderlab contains the similarity
+function. The supported methods to compute similarities are cosine, pearson, and jaccard
+
+
+# Recommendation Algorithm: Item-Item Collaborative Filtering
+
+
+# Discussion
+
+# Conclusion
+
+# References
+Hahsler, M. (2019, August 27). MovieLense Dataset (100k). Rdrr.Io. https://rdrr.io/cran/recommenderlab/man/MovieLense.html
+
+
