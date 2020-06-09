@@ -22,11 +22,10 @@ You should evaluate and compare different approaches, using different algorithms
 You may use the course text’s recommenderlab or any other library that you want. Please provide at least one graph, and a textual summary of your findings and recommendations.
 
 # Introduction
-In this project we will use the built in MovieLense dataset from the recommenderlab .We will implement and compare all the recommendation algorithms given the  project instructions.
+In this project we will use the built in MovieLense dataset from the **recommenderlab** library. We will implement and compare all the recommendation algorithms given the project instructions.
 
 ## Data Source
 
-?
 
 ## Motivation
 
@@ -50,12 +49,13 @@ library(recommenderlab)
 set.seed(200)
 data("MovieLense")
 movielense <- MovieLense@data
+show(MovieLense)
 
 ```
 
 # Explore Data set
 
-With reference to code by (Hahsler, 2019), we did some exploration of the dataset so that we get get a sense of the how rating are distributed according to user and item.This will inform how we will subset the data for modeling.
+With reference to code by (Hahsler, 2019), we did some exploration of the dataset so that we get get a sense of the how ratings are distributed according to user and item. This will inform how we will subset the data for modeling.
 
 
 ### Distribution of ratings by user and item
@@ -71,9 +71,9 @@ The visualisation above shows that the distribution of ratings by users in the M
 hist(colCounts(MovieLense))
 ```
 
-The visualisation above shows that the distribution of ratings by item in the Movielense dataset is also severely  right skewed.
+The visualisation above shows that the distribution of ratings by item in the Movielense dataset is also severely right skewed.
 
-Given the skewedness in both these distributions, it is obvious that there is a lot os sparsity in the dataset.
+Given the skewedness in both these distributions, it is obvious that there is a lot of sparsity in the dataset.
 
 ### Overall distribution of ratings
 ```{r}
@@ -87,7 +87,7 @@ movielense %>%
   labs(title = " Overall Distribution of Ratings", y = "", x = "Ratings") +
   theme_minimal()
 ```
-The overall distribution of ratings is slightly left skewed. The mean rating  is confirmed below:
+The overall distribution of ratings is slightly left skewed. The mean rating is confirmed below:
 
 ```{r}
 ## mean rating (averaged over users)
@@ -111,7 +111,7 @@ image(movielense, main = "Heatmap of the rating matrix")
 
 # Prepare Data For Modeling
 
-It is obvious that there is much sparsity in the dataset.There are many cases where users that might not have rated any movies many movies which may not have been rated In order to have a  healthy baseline on which to our  build recommendation models, we will take into consideration those users who have rated at least 50 movies and those movies that are rated b atleast 100 users. We will then split the data into train and test sets.
+It is obvious that the dataset is very sparse. It includes many individuals that rated very few movies, and many movies that have very few ratings. In order to have a healthy baseline on which to our build recommendation models, we will take into consideration those users who have rated at least 50 movies and those movies that are rated by at least 100 users. We will then split the data into train and test sets.
 
 ```{r}
 
