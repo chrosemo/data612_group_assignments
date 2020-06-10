@@ -22,7 +22,7 @@ You should evaluate and compare different approaches, using different algorithms
 You may use the course text’s recommenderlab or any other library that you want. Please provide at least one graph, and a textual summary of your findings and recommendations.
 
 # Introduction and motivation
-In this project we will use the built-in MovieLense dataset from the **recommenderlab** library. We will implement and compare results from several recommendation algorithms. Our recommenders will predict movie ratings given critic and movie profiles as well as critics' past ratings.
+In this project we will use the built-in MovieLense dataset from the **recommenderlab** library. We will implement and compare results from several recommendation algorithms. Our recommenders will predict movie ratings given user and movie profiles as well as users' past ratings.
 
 
 ```{r message=FALSE, include=FALSE}
