@@ -33,6 +33,7 @@ library(pander)
 library(knitr)
 library(dplyr)
 library(recommenderlab)
+library(ggplot2)
 
 ```
 
@@ -154,6 +155,145 @@ In **collaborative filtering**, recommendations are based on information about s
 ### Content-Based Filtering
 
 
+### User-User Collaborative Filtering
+**User-based collaborative filtering**: This recommends to a user the items that are the most preferred by similar users. Our approach will be to:
+
+1. Measure the similarity between every pair of users.
+2. Identify the most similar users.
+3. Aggregate the ratings from the movies watched by similar users.
+4. Select the top rated movies for recommendation. 
+
+The parameters for this approach are similar to those of the item-item filtering: the similarity method (cosine, pearson, and jaccard), the number of nearest neighbors, and the normalization technique. 
+  
+We'll start off with a simple, non-optimized user-user based model to get a feel for the functions. We'll use our train set to create the model and our test set to get recommendations on. Here, we've defined the number of recommendations as 5, the similarity method as cosine, and the number of neighbors as 5. We'll plot the distribution of recommendations. 
+
+```{r}
+# recommend 5 movies to each user
+n_recommended <- 5
+
+# create model on training set
+recc_model <- Recommender(data = train_set, method = "UBCF", parameter = list(method = 'cosine', nn = 5, normalize = 'center' ))
+
+# predict on test set
+recc_predict <- predict(object = recc_model, newdata = test_set, n = n_recommended)
+
+# create a matrix of predictions
+recc_matrix <- sapply(recc_predict@items, function(x){
+colnames(most_rated)[x]
+})
+
+# plot distribution of movie recommendations
+numRec <- factor(table(recc_matrix))
+
+qplot(numRec,
+      main = 'Distribution of Movie Recommendations',
+      ylab='Number of Movies',
+      xlab = 'Times Recommended') 
+
+```
+
+We can see that that most movies are recommended only a few times.  
+  
+Now, we can optimize our model by tweaking the similarity method, number of neighbors, and normalization type. We'll create a function to calculate and record the RMSE, MSE, and MAE for each set of parameters. 
+
+```{r}
+set.seed(200)
+
+# function to calculate error 
+errorCalc <- function(e, sm, nb, nrm, evl){
+  
+  # create a user-based CF recommender using training data
+  rec <- Recommender(getData(e, "train"), 
+                     evl, 
+                     parameter = list(method = sm, 
+                                      nn = nb, 
+                                      normalize = nrm))
+  
+  # create predictions for the test data using known ratings 
+  pred <- predict(rec, getData(e, "known"), type="ratings")
+  
+  # avg error metrics per user, avgd over all recommendations
+  error.ubcf <-calcPredictionAccuracy(pred, getData(e, "unknown"))
+  
+  # evaluate topNLists instead 
+  pred.top10 <- predict(rec, getData(e, "known"), type="topNList", n = 5)
+  error.ubcf.top10 <- calcPredictionAccuracy(pred.top10,
+                                             getData(e,"unknown"), 
+                                             given=5, 
+                                             goodRating=3)
+  
+  error.ubcf <- c(error.ubcf, sm, nb, nrm)
+  names(error.ubcf) <- c('RMSE', 'MSE', 'MAE','similarity',
+                         'neighbors','norm')
+  
+  return(error.ubcf)
+}
+
+```
+
+In this case, we'll define an evaluation scheme that consists of 10-fold cross validation with a "good rating" defined as 3. We will cycle through all parameter combinations to identify what the optimal combination is. 
+``` {r}
+# cycle through all parameter combinations
+simMethod <- c('cosine', 'pearson', 'jaccard')
+neighbors <- seq(5,100,5)
+norm <- c('center', 'Z-score')
+evalType <- "UBCF"
+
+# 10-fold cross validation, good ratings = 3, withholding 10 items for eval
+e <- evaluationScheme(most_rated, method = "cross-validation", k=10, given = 10, goodRating=3)
+
+# create list for errors
+errors.names <- c("RMSE", "MSE", "MAE", 'similarity', 'neighbors','norm')
+ubcfErrors.ls <- vector("list", length(errors.names))
+names(ubcfErrors.ls) <- errors.names
+
+for (i in simMethod){
+  for (j in neighbors){
+    for (k in norm){
+      ubcfErrors.ls <- rbind(ubcfErrors.ls, errorCalc(e, i, j, k, evalType))
+       
+    }
+  }
+}
+
+```
+
+We can now visualize our errors: 
+```{r}
+
+finalErrors.ubcf <- as.data.frame(ubcfErrors.ls) %>%
+  filter(RMSE != 'NULL') %>%
+  mutate(RMSE = as.double(RMSE),
+         MSE = as.double(MSE), 
+         MAE = as.double(MAE)) 
+
+finalErrors.ubcf$ERROR_MEAN<- rowMeans(subset(finalErrors.ubcf, select = c(RMSE, MSE, MAE)), na.rm = TRUE)
+
+ggplot(finalErrors.ubcf, aes(1:nrow(finalErrors.ubcf))) +                    
+  geom_line(aes(y=RMSE), colour="red") +  
+  geom_line(aes(y=MSE), colour="green") + 
+  geom_line(aes(y=MAE), colour="blue") +
+  geom_line(aes(y=ERROR_MEAN), colour="purple") +
+  xlab('Trial Run') +
+  ylab('Error') +
+  ggtitle('Errors across all runs')
+
+```
+
+To identify which set of parameters to use, we can identify the combination that has the lowest error.  
+
+```{r}
+
+paramVals.ubcf <- finalErrors.ubcf %>%
+  filter(ERROR_MEAN == min(finalErrors.ubcf$ERROR_MEAN))
+
+paramVals.ubcf
+
+```
+
+This is the set of parameters we will use for the final comparison. 
+
+
 ### Item-Item Collaborative Filtering
 **Item-based collaborative filtering**: This recommends to a user the items that are most similar on the user's previous ratings. We will follow this process:
 
@@ -166,30 +306,22 @@ In **collaborative filtering**, recommendations are based on information about s
 
 ```
 
-### User-User Collaborative Filtering
-**User-based collaborative filtering**: This recommends to a user the items that are the most preferred by similar users. Our approach will be to:
+### Evaluation
 
-1. Measure the similarity between every pair of users.
-2. Identify the most similar users.
-3. Aggregate the ratings from the movies watched by similar users.
-4. Select the top rated movies for recommendation. 
-
-The parameters for this approach are similar to those of the item-item filtering: the similarity method (cosine, pearson, and jaccard), the number of nearest neighbors, and the normalization technique. 
-
+For our final evaluation, we'll take compare the user-user and item-item based modeling with the optimal parameters to each other. 
 ```{r}
 
-simMethod <- c('cosine', 'pearson', 'jaccard')
-neighbors <- 1:100
-normTechs <- c('center', 'Z-score')
+results.ubcf <- evaluate(e, 'UBCF', parameter = list(method = 'cosine', 
+                                      nn = 100, 
+                                      normalize = 'center'))
 
-simMethod = 'cosine'
-neighbors = 10
-
-recc_model <- Recommender(data = train_set, method = "UBCF", parameter = list(method = simMethod, nn = neighbors ))
-
-model_details <- c(getModel(recc_model)$method, getModel(recc_model)$nn, getModel(recc_model)$normalize)
+avgResults.ubcf <- as.data.frame(avg(results.ubcf))
+plot(avgResults.ubcf$FPR, avgResults.ubcf$TPR)
 
 ```
+
+
+
 
 # Discussion
 Pros of content-based systems:
@@ -212,6 +344,8 @@ Cons of content-based systems:
 # Conclusion
 
 # References
-Hahsler, M. (2019, August 27). MovieLense Dataset (100k). Rdrr.Io. https://rdrr.io/cran/recommenderlab/man/MovieLense.html
+Hahsler, M. (2019, August 27). MovieLense Dataset (100k). Rdrr.Io. https://rdrr.io/cran/recommenderlab/man/MovieLense.html  
+  
+“Recommender Systems 101 – a Step by Step Practical Example in R.” R, 24 Dec. 2014, www.r-bloggers.com/recommender-systems-101-a-step-by-step-practical-example-in-r/.
 
 
