@@ -94,12 +94,11 @@ mean(rowMeans(MovieLense))
 ```
 
 ### View of meta data and heatmap of ratings
-The format of MovieLenseMeta is a data.frame with movie title, year, IMDb URL and indicator variables for 19 genres. See below view of meta data
+The format of MovieLenseMeta is a data frame with movie title, year, IMDb URL and indicator variables for 19 genres. See below view of meta data
 ```{r}
 # View the meta data:
 movie_meta <- MovieLenseMeta
 str(movie_meta)
-#pander(head(movie_meta), caption = "Sample Movie Meta Data")
 ```
 
 
@@ -146,13 +145,13 @@ paste0('Training Set: ',nrow(train_set), ' records | Test Set: ', nrow(test_set)
 ```
 
 # Recommendation Algorithms
-Now that we've cleaned up our data, we can configure and implement recommender systems based on 3 different filtering approaches: content-based, user-user collaborative, and item-item collaborative. 
+Now that we've cleaned up our data, we can configure and implement our recommender systems. There are 3 main filtering approaches: content-based, user-user collaborative, and item-item collaborative. 
   
 In **content-based filtering**, recommendations are user-based -- a user profile is defined and the algorithm recommends new items that are similar to previously rated items. 
 
-In **collaborative filtering**, recommendations are based on information about similar users (user-user) or similar items (item-item). The *recommenderlab* library contains 3 similarity fucntions that we will explore: cosine, pearson, and jaccard.
-
-### Content-Based Filtering
+In **collaborative filtering**, recommendations are based on information about similar users (user-user) or similar items (item-item). The *recommenderlab* library contains 3 similarity functions that we will explore: cosine, pearson, and jaccard.  
+  
+For this project, we will focus on user-user and item-item based collaborative filtering. 
 
 
 ### User-User Collaborative Filtering
@@ -316,6 +315,8 @@ results.ubcf <- evaluate(e, 'UBCF', parameter = list(method = 'cosine',
                                       normalize = 'center'))
 
 avgResults.ubcf <- as.data.frame(avg(results.ubcf))
+
+
 plot(avgResults.ubcf$FPR, avgResults.ubcf$TPR)
 
 ```
@@ -324,24 +325,7 @@ plot(avgResults.ubcf$FPR, avgResults.ubcf$TPR)
 
 
 # Discussion
-Pros of content-based systems:
-
-* No need for data on other users, so you can start making recommendations right away for a user
-* Can recommend to users with distinct taste (the users are very different to all other users)
-* Can recommend new and unpopular items because we aren't relying on other users' ratings
-* Recommendations are explainable because they're based on the user's current profile
-
-Cons of content-based systems:
-
-* Developing features can be difficult
-* Does not recommend items outside of an individual's current profile
-* Does not recommend items that the user may like but hasn't rated
-* Cannot recommend items to brand new users with no information to make a user profile
-
-
-
-
-# Conclusion
+This analysis has shown us that
 
 # References
 Hahsler, M. (2019, August 27). MovieLense Dataset (100k). Rdrr.Io. https://rdrr.io/cran/recommenderlab/man/MovieLense.html  
