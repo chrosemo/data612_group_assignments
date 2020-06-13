@@ -300,6 +300,8 @@ This is the set of parameters we will use for the final comparison.
 2. Identify the k-most similar movies for each movie title. 
 3. Identify the movies most similar to previous rated movies for each user. 
 
+Here, we mimic our prior approach to user-based collaborative filtering.
+
 ```{r}
 # recommend 5 movies to each user
 n_recommended_i <- 5
@@ -324,9 +326,9 @@ qplot(numRec_i,
 ```
 
 ```{r}
-set.seed(200)
 # function to calculate error 
 errorCalc_i <- function(e, sm, kn, nrm, evl){
+  set.seed(200)
   # create a user-based CF recommender using training data
   rec <- Recommender(getData(e, "train"), evl, parameter = list(method = sm, k = kn, normalize = nrm))
   
@@ -337,7 +339,6 @@ errorCalc_i <- function(e, sm, kn, nrm, evl){
   error.ibcf <-calcPredictionAccuracy(pred, getData(e, "unknown"))
   error.ibcf <- c(error.ibcf, sm, kn, nrm)
   names(error.ibcf) <- c('RMSE', 'MSE', 'MAE','similarity', 'neighbor items', 'norm')
-  
   return(error.ibcf)
 }
 ```
@@ -345,7 +346,7 @@ errorCalc_i <- function(e, sm, kn, nrm, evl){
 ```{r}
 # Model parameters
 simMethod <- c('cosine', 'pearson', 'jaccard')
-neighbors <- seq(5,100,5)
+vector_k <- seq(5, 100, 5)
 norm <- c('center', 'Z-score')
 evalType <- "IBCF"
 
@@ -353,11 +354,11 @@ evalType <- "IBCF"
 e <- evaluationScheme(most_rated, method = "cross-validation", k=10, given = 10, goodRating=3)
 
 # create list for errors
-errors.names <- c("RMSE", "MSE", "MAE", 'similarity', 'neighbor items', 'norm')
+errors.names <- c("RMSE", "MSE", "MAE", 'similarity', 'k-closest items', 'norm')
 ibcfErrors.ls <- vector("list", length(errors.names))
 names(ibcfErrors.ls) <- errors.names
 for (i in simMethod) {
-  for (j in neighbors) {
+  for (j in vector_k) {
     for (k in norm){
       ibcfErrors.ls <- rbind(ibcfErrors.ls, errorCalc_i(e, i, j, k, evalType))
     }
@@ -387,6 +388,7 @@ ggplot(finalErrors.ibcf, aes(1:nrow(finalErrors.ibcf))) +
   ggtitle('Errors across all runs')
 ```
 
+The combination of parameters that minimizes the mean error includes Pearson's correlation, 100 neighbors, and Z-score normalization.
 ```{r}
 # Finding parameter values that minimize the mean error
 paramVals.ibcf <- finalErrors.ibcf %>%
@@ -394,41 +396,59 @@ paramVals.ibcf <- finalErrors.ibcf %>%
 paramVals.ibcf
 ```
 
+### Evaluation
+
+For our final evaluation, we compare the user-user and item-item based models, each optimized with those combinations of parameters that minimize mean error. We plot a ROC curve and Precision-recall for each model, and then
+
+**User-based collaborative filtering**
+```{r}
+# Results of model that minimizes mean error
+results.ubcf <- evaluate(e, 'UBCF', parameter = list(method = 'cosine', 
+                                      nn = 100, 
+                                      normalize = 'center'))
+
+# Plotting True Positive Rate (TPR) against False Positive Rate (FPR)
+avgResults.ubcf <- as.data.frame(avg(results.ubcf))
+plot(avgResults.ubcf$FPR, avgResults.ubcf$TPR)
+
+# Plotting Precision-recall
+plot(results.ubcf, "prec/rec", annotate = TRUE, main = "Precision-recall")
+```
+
+**Item-based collaborative filtering**
 ```{r}
 # Evaluating using the parameter values - Pearson's, k = 100, Z-score normalization
 results.ibcf <- evaluate(e, 'IBCF', parameter = list(method = paramVals.ibcf[[4]], 
                                                      k = as.integer(paramVals.ibcf[[5]]), 
                                                      normalize = paramVals.ibcf[[6]]))
+
 # Plotting ROC curve and Precision-recall
 plot(results.ibcf, annotate = TRUE, main = "ROC curve")
 plot(results.ibcf, "prec/rec", annotate = TRUE, main = "Precision-recall")
-
-# Plotting True Positive Rate (TPR) against False Positive Rate (FPR)
-avgResults.ibcf <- as.data.frame(avg(results.ibcf))
-plot(avgResults.ibcf$FPR, avgResults.ibcf$TPR)
 ```
 
-### Evaluation
-
-For our final evaluation, we'll take compare the user-user and item-item based modeling with the optimal parameters to each other. 
+**Comparison**
 ```{r}
-
-results.ubcf <- evaluate(e, 'UBCF', parameter = list(method = 'cosine', 
-                                      nn = 100, 
-                                      normalize = 'center'))
-
-avgResults.ubcf <- as.data.frame(avg(results.ubcf))
-
-
-plot(avgResults.ubcf$FPR, avgResults.ubcf$TPR)
-
+# UBCF and IBCF models with optimal parameters
+models_to_evaluate <- list(results.ubcf = list(name = "UBCF", param = list(method = 'cosine',
+                                                                      nn = 100,
+                                                                      normalize = 'center')),
+                           results.ibcf = list(name = "IBCF", param = list(method = paramVals.ibcf[[4]], 
+                                                                      k = as.integer(paramVals.ibcf[[5]]), 
+                                                                      normalize = paramVals.ibcf[[6]])))
+# Evaluating at various numbers of recommendations
+n_recommendations <- seq(5, 100, 5)                          
+list_results <- evaluate(e, method = models_to_evaluate, n = n_recommendations)
 ```
 
-
-
+```{r}
+# Plotting and comparing ROC curve and Precision-recall for each model
+plot(list_results, legend = "topleft", main = "ROC curve")
+plot(list_results, "prec/rec", legend = "bottomright", main = "Precision-recall")
+```
 
 # Discussion
-This analysis has shown us that
+This analysis suggests that, for our subset of the MovieLense dataset, a user-based collaborative filtering model with optimal model parameters outperforms its item-based collaborative filtering counterpart.
 
 # References
 Hahsler, M. (2019, August 27). MovieLense Dataset (100k). Rdrr.Io. https://rdrr.io/cran/recommenderlab/man/MovieLense.html  
