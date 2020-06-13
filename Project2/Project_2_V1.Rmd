@@ -301,8 +301,111 @@ This is the set of parameters we will use for the final comparison.
 3. Identify the movies most similar to previous rated movies for each user. 
 
 ```{r}
+# recommend 5 movies to each user
+n_recommended_i <- 5
 
+# create model on training set
+recc_model_i <- Recommender(data = train_set, method = "IBCF", parameter = list(method = 'cosine', k = 5, normalize = 'center'))
 
+# predict on test set
+recc_predict_i <- predict(object = recc_model_i, newdata = test_set, n = n_recommended_i)
+
+# create a matrix of predictions
+recc_matrix_i <- sapply(recc_predict_i@items, function(x){
+  colnames(most_rated)[x]
+})
+
+# plot distribution of movie recommendations
+numRec_i <- factor(table(recc_matrix_i))
+qplot(numRec_i,
+      main = 'Distribution of Movie Recommendations',
+      ylab='Number of Movies',
+      xlab = 'Times Recommended')
+```
+
+```{r}
+set.seed(200)
+# function to calculate error 
+errorCalc_i <- function(e, sm, kn, nrm, evl){
+  # create a user-based CF recommender using training data
+  rec <- Recommender(getData(e, "train"), evl, parameter = list(method = sm, k = kn, normalize = nrm))
+  
+  # create predictions for the test data using known ratings 
+  pred <- predict(rec, getData(e, "known"), type="ratings")
+  
+  # avg error metrics per user, avgd over all recommendations
+  error.ibcf <-calcPredictionAccuracy(pred, getData(e, "unknown"))
+  error.ibcf <- c(error.ibcf, sm, kn, nrm)
+  names(error.ibcf) <- c('RMSE', 'MSE', 'MAE','similarity', 'neighbor items', 'norm')
+  
+  return(error.ibcf)
+}
+```
+
+```{r}
+# Model parameters
+simMethod <- c('cosine', 'pearson', 'jaccard')
+neighbors <- seq(5,100,5)
+norm <- c('center', 'Z-score')
+evalType <- "IBCF"
+
+# 10-fold cross validation, good ratings = 3, withholding 10 items for eval
+e <- evaluationScheme(most_rated, method = "cross-validation", k=10, given = 10, goodRating=3)
+
+# create list for errors
+errors.names <- c("RMSE", "MSE", "MAE", 'similarity', 'neighbor items', 'norm')
+ibcfErrors.ls <- vector("list", length(errors.names))
+names(ibcfErrors.ls) <- errors.names
+for (i in simMethod) {
+  for (j in neighbors) {
+    for (k in norm){
+      ibcfErrors.ls <- rbind(ibcfErrors.ls, errorCalc_i(e, i, j, k, evalType))
+    }
+  }
+}
+```
+
+```{r}
+# Pulling lists of errors into dataframe
+finalErrors.ibcf <- as.data.frame(ibcfErrors.ls) %>%
+  filter(RMSE != 'NULL') %>%
+  mutate(RMSE = as.double(RMSE),
+         MSE = as.double(MSE), 
+         MAE = as.double(MAE)) 
+
+# Adding a column containing mean error
+finalErrors.ibcf$ERROR_MEAN<- rowMeans(subset(finalErrors.ibcf, select = c(RMSE, MSE, MAE)), na.rm = TRUE)
+
+# Plotting the errors
+ggplot(finalErrors.ibcf, aes(1:nrow(finalErrors.ibcf))) +                    
+  geom_line(aes(y=RMSE), colour="red") +  
+  geom_line(aes(y=MSE), colour="green") + 
+  geom_line(aes(y=MAE), colour="blue") +
+  geom_line(aes(y=ERROR_MEAN), colour="purple") +
+  xlab('Trial Run') +
+  ylab('Error') +
+  ggtitle('Errors across all runs')
+```
+
+```{r}
+# Finding parameter values that minimize the mean error
+paramVals.ibcf <- finalErrors.ibcf %>%
+  filter(ERROR_MEAN == min(finalErrors.ibcf$ERROR_MEAN))
+paramVals.ibcf
+```
+
+```{r}
+# Evaluating using the parameter values - Pearson's, k = 100, Z-score normalization
+results.ibcf <- evaluate(e, 'IBCF', parameter = list(method = paramVals.ibcf[[4]], 
+                                                     k = as.integer(paramVals.ibcf[[5]]), 
+                                                     normalize = paramVals.ibcf[[6]]))
+# Plotting ROC curve and Precision-recall
+plot(results.ibcf, annotate = TRUE, main = "ROC curve")
+plot(results.ibcf, "prec/rec", annotate = TRUE, main = "Precision-recall")
+
+# Plotting True Positive Rate (TPR) against False Positive Rate (FPR)
+avgResults.ibcf <- as.data.frame(avg(results.ibcf))
+plot(avgResults.ibcf$FPR, avgResults.ibcf$TPR)
 ```
 
 ### Evaluation
