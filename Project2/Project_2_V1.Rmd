@@ -1,5 +1,5 @@
 ---
-title: 'DATA 612: Project 2 | CONTENT BASED AND COLLABORATIVE FILTERING'
+title: 'DATA 612: Project 2 | Content Based and Collaborative Filtering'
 author: "Amber Ferger, Charlie Rosemond, Juanelle Marks" 
 date: "6/9/2020"
 output: 
@@ -13,25 +13,17 @@ output:
 # Project Instructions
 
 The goal of this assignment is for you to try out different ways of implementing and configuring a recommender, and to evaluate your different approaches.For assignment 2, start with an existing dataset of user-item ratings, such MovieLens. Implement at least two of these recommendation algorithms:
-• Content-Based Filtering
-• User-User Collaborative Filtering
-• Item-Item Collaborative Filtering
+
+* Content-Based Filtering
+* User-User Collaborative Filtering
+* Item-Item Collaborative Filtering
 
 You should evaluate and compare different approaches, using different algorithms, normalization techniques, similarity methods, neighborhood sizes, etc. You don’t need to be exhaustive—these are just some suggested possibilities.
 
 You may use the course text’s recommenderlab or any other library that you want. Please provide at least one graph, and a textual summary of your findings and recommendations.
 
-# Introduction
-In this project we will use the built in MovieLense dataset from the recommenderlab .We will implement and compare all the recommendation algorithms given the  project instructions.
-
-## Data Source
-
-?
-
-## Motivation
-
-This system will  ? 
-
+# Introduction and motivation
+In this project we will use the built-in MovieLense dataset from the **recommenderlab** library. We will implement and compare results from several recommendation algorithms. Our recommenders will predict movie ratings given user and movie profiles as well as users' past ratings.
 
 
 ```{r message=FALSE, include=FALSE}
@@ -41,42 +33,49 @@ library(pander)
 library(knitr)
 library(dplyr)
 library(recommenderlab)
+library(ggplot2)
 
 ```
 
 
-### Load data
+### Load Data
+Our data is stored as a *realRatingMatrix*, where each row represents a user and each column represents a movie. We can see that there are a total of 99,392 ratings, which means that not every user has watched every movie. This means that our matrix is sparse -- most cells have no information.
 ```{r}
 set.seed(200)
 data("MovieLense")
 movielense <- MovieLense@data
+show(MovieLense)
 
 ```
 
-# Explore Data set
+# Explore Data Set
 
-With reference to code by (Hahsler, 2019), we did some exploration of the dataset so that we get get a sense of the how rating are distributed according to user and item.This will inform how we will subset the data for modeling.
+With reference to code by (Hahsler, 2019), we did some exploration of the dataset so that we get get a sense of the how ratings are distributed according to user and item. This will inform how we will subset the data for modeling.
 
 
 ### Distribution of ratings by user and item
+First, we can take a look at the number of ratings per user. 
 ```{r}
 ## number of ratings per user using base R
 hist(rowCounts(MovieLense))
 ```
 
-The visualisation above shows that the distribution of ratings by users in the Movielense dataset is severely  right skewed.
+The data is severely right skewed, which indicates that most users have only rated a few movies.  
+  
+Next, we can take a look at the number of ratings per movie.
 
 ```{r}
 ## number of ratings per movie using base R
 hist(colCounts(MovieLense))
 ```
 
-The visualisation above shows that the distribution of ratings by item in the Movielense dataset is also severely  right skewed.
+This distribution is also severely right skewed, which means that most movies only have a few ratings. 
 
-Given the skewedness in both these distributions, it is obvious that there is a lot os sparsity in the dataset.
+This aligns with our original intuitios -- given the skewedness in both of these distributions, it is obvious that there is a lot of sparsity in the dataset.
 
 ### Overall distribution of ratings
-```{r}
+Next, we can look at the distribution of ratings.
+```{r, warning=FALSE}
 # Visualise the distribution of ratings in this dataset
 movielense %>% 
   as.vector() %>% 
@@ -87,7 +86,7 @@ movielense %>%
   labs(title = " Overall Distribution of Ratings", y = "", x = "Ratings") +
   theme_minimal()
 ```
-The overall distribution of ratings is slightly left skewed. The mean rating  is confirmed below:
+The overall distribution of ratings is left skewed, indicating that people tend to rate movies more positively. The mean rating is confirmed below:
 
 ```{r}
 ## mean rating (averaged over users)
@@ -95,59 +94,365 @@ mean(rowMeans(MovieLense))
 ```
 
 ### View of meta data and heatmap of ratings
-The format of MovieLenseMeta is a data.frame with movie title, year, IMDb URL and indicator variables for 19 genres. See below view of meta data
+The format of MovieLenseMeta is a data frame with movie title, year, IMDb URL and indicator variables for 19 genres. See below view of meta data
 ```{r}
-
 # View the meta data:
 movie_meta <- MovieLenseMeta
-pander(head(movie_meta), caption = "Sample Movie Meta Data")
+str(movie_meta)
 ```
 
 
-
+We can also build out a heatmap of the most relevant users/movies. This will consist of the users that rated the most movies and the movies that have the most ratings. Dark columns represent highly rated movies and dark rows represent users that give high ratings. This indicates the need for normalization of the data -- we don't want to skew the results from users that predominantly rank high or low. 
 ```{r}
-image(movielense, main = "Heatmap of the rating matrix")
+min_n_movies <- quantile(rowCounts(MovieLense), 0.99)
+min_n_users <- quantile(colCounts(MovieLense), 0.99)
+
+image(MovieLense[rowCounts(MovieLense) > min_n_movies,
+colCounts(MovieLense) > min_n_users], main = "Heatmap of the top users
+and movies")
+
 ```
 
 # Prepare Data For Modeling
 
-It is obvious that there is much sparsity in the dataset.There are many cases where users that might not have rated any movies many movies which may not have been rated In order to have a  healthy baseline on which to our  build recommendation models, we will take into consideration those users who have rated at least 50 movies and those movies that are rated b atleast 100 users. We will then split the data into train and test sets.
+Our data prep will involve: selecting relevant data (movies that have a lot of ratings and users that have seen a lot of movies) and splitting into training and test sets. Once we've cleaned things up, we can start to build our recommender models. 
+
+### Select relevant data
+
+It is obvious that the dataset is very sparse. It includes many individuals that rated very few movies, and many movies that have very few ratings. In order to have a healthy baseline on which to our build recommendation models, we will take into consideration those users who have rated at least 50 movies and those movies that are rated by at least 100 users. A look at the disribution of average rating per user shows us that we have a large variation across the subset.  
 
 ```{r}
-
+# base population
 most_rated <- MovieLense[rowCounts(MovieLense) > 50, colCounts(MovieLense) > 100]
+average_ratings_per_user <- rowMeans(most_rated)
+qplot(average_ratings_per_user) + stat_bin(binwidth = 0.1) +
+ggtitle("Distribution of the average rating per user")
 
+```
+
+
+### Split into training and testing
+Next, we can split the data into train and test sets. We are left with 462 records in the training set and 98 records in the test set.
+
+```{r}
 # split the dataset into test set and train set
 which_train <- sample(x = c(TRUE, FALSE), size = nrow(most_rated), replace = TRUE, prob = c(0.8, 0.2))
 train_set <- most_rated[which_train, ]
 test_set <- most_rated[!which_train, ]
 
+paste0('Training Set: ',nrow(train_set), ' records | Test Set: ', nrow(test_set), ' records')
+
 ```
 
+# Recommendation Algorithms
+Now that we've cleaned up our data, we can configure and implement our recommender systems. There are 3 main filtering approaches: content-based, user-user collaborative, and item-item collaborative. 
+  
+In **content-based filtering**, recommendations are user-based -- a user profile is defined and the algorithm recommends new items that are similar to previously rated items. 
+
+In **collaborative filtering**, recommendations are based on information about similar users (user-user) or similar items (item-item). The *recommenderlab* library contains 3 similarity functions that we will explore: cosine, pearson, and jaccard.  
+  
+For this project, we will focus on user-user and item-item based collaborative filtering. 
 
 
-# Recommendation Algorithm: Content Based Filtering
-Content-based filtering: This is for each user; it defines a user profile and identify the items that match it.
+### User-User Collaborative Filtering
+**User-based collaborative filtering**: This recommends to a user the items that are the most preferred by similar users. Our approach will be to:
 
-Collaborative filtering: This is the branch of techniques that we will explore in detail. The algorithms are based on information about similar users or
-similar items. The two sub-branches are as follows:
-° Item-based collaborative filtering: This recommends to a user the items that are most similar to the user's purchases
-° User-based collaborative filtering: This recommends to a user the items that are the most preferred by similar users
+1. Measure the similarity between every pair of users.
+2. Identify the most similar users.
+3. Aggregate the ratings from the movies watched by similar users.
+4. Select the top rated movies for recommendation. 
 
-# Recommendation Algorithm: User-User Collaborative Filtering
+The parameters for this approach are similar to those of the item-item filtering: the similarity method (cosine, pearson, and jaccard), the number of nearest neighbors, and the normalization technique. 
+  
+We'll start off with a simple, non-optimized user-user based model to get a feel for the functions. We'll use our train set to create the model and our test set to get recommendations on. Here, we've defined the number of recommendations as 5, the similarity method as cosine, and the number of neighbors as 5. We'll plot the distribution of recommendations. 
 
-Collaborative filtering algorithms are based on measuring the similarity between users or between items. For this purpose, recommenderlab contains the similarity
-function. The supported methods to compute similarities are cosine, pearson, and jaccard
+```{r}
+# recommend 5 movies to each user
+n_recommended <- 5
+
+# create model on training set
+recc_model <- Recommender(data = train_set, method = "UBCF", parameter = list(method = 'cosine', nn = 5, normalize = 'center' ))
+
+# predict on test set
+recc_predict <- predict(object = recc_model, newdata = test_set, n = n_recommended)
+
+# create a matrix of predictions
+recc_matrix <- sapply(recc_predict@items, function(x){
+colnames(most_rated)[x]
+})
+
+# plot distribution of movie recommendations
+numRec <- factor(table(recc_matrix))
+
+qplot(numRec,
+      main = 'Distribution of Movie Recommendations',
+      ylab='Number of Movies',
+      xlab = 'Times Recommended') 
+
+```
+
+We can see that that most movies are recommended only a few times.  
+  
+Now, we can optimize our model by tweaking the similarity method, number of neighbors, and normalization type. We'll create a function to calculate and record the RMSE, MSE, and MAE for each set of parameters. 
+
+```{r}
+set.seed(200)
+
+# function to calculate error 
+errorCalc <- function(e, sm, nb, nrm, evl){
+  
+  # create a user-based CF recommender using training data
+  rec <- Recommender(getData(e, "train"), 
+                     evl, 
+                     parameter = list(method = sm, 
+                                      nn = nb, 
+                                      normalize = nrm))
+  
+  # create predictions for the test data using known ratings 
+  pred <- predict(rec, getData(e, "known"), type="ratings")
+  
+  # avg error metrics per user, avgd over all recommendations
+  error.ubcf <-calcPredictionAccuracy(pred, getData(e, "unknown"))
+  
+  # evaluate topNLists instead 
+  pred.top10 <- predict(rec, getData(e, "known"), type="topNList", n = 5)
+  error.ubcf.top10 <- calcPredictionAccuracy(pred.top10,
+                                             getData(e,"unknown"), 
+                                             given=5, 
+                                             goodRating=3)
+  
+  error.ubcf <- c(error.ubcf, sm, nb, nrm)
+  names(error.ubcf) <- c('RMSE', 'MSE', 'MAE','similarity',
+                         'neighbors','norm')
+  
+  return(error.ubcf)
+}
+
+```
+
+In this case, we'll define an evaluation scheme that consists of 10-fold cross validation with a "good rating" defined as 3. We will cycle through all parameter combinations to identify what the optimal combination is. 
+``` {r}
+# cycle through all parameter combinations
+simMethod <- c('cosine', 'pearson', 'jaccard')
+neighbors <- seq(5,100,5)
+norm <- c('center', 'Z-score')
+evalType <- "UBCF"
+
+# 10-fold cross validation, good ratings = 3, withholding 10 items for eval
+e <- evaluationScheme(most_rated, method = "cross-validation", k=10, given = 10, goodRating=3)
+
+# create list for errors
+errors.names <- c("RMSE", "MSE", "MAE", 'similarity', 'neighbors','norm')
+ubcfErrors.ls <- vector("list", length(errors.names))
+names(ubcfErrors.ls) <- errors.names
+
+for (i in simMethod){
+  for (j in neighbors){
+    for (k in norm){
+      ubcfErrors.ls <- rbind(ubcfErrors.ls, errorCalc(e, i, j, k, evalType))
+       
+    }
+  }
+}
+
+```
+
+We can now visualize our errors: 
+```{r}
+
+finalErrors.ubcf <- as.data.frame(ubcfErrors.ls) %>%
+  filter(RMSE != 'NULL') %>%
+  mutate(RMSE = as.double(RMSE),
+         MSE = as.double(MSE), 
+         MAE = as.double(MAE)) 
+
+finalErrors.ubcf$ERROR_MEAN<- rowMeans(subset(finalErrors.ubcf, select = c(RMSE, MSE, MAE)), na.rm = TRUE)
+
+ggplot(finalErrors.ubcf, aes(1:nrow(finalErrors.ubcf))) +                    
+  geom_line(aes(y=RMSE), colour="red") +  
+  geom_line(aes(y=MSE), colour="green") + 
+  geom_line(aes(y=MAE), colour="blue") +
+  geom_line(aes(y=ERROR_MEAN), colour="purple") +
+  xlab('Trial Run') +
+  ylab('Error') +
+  ggtitle('Errors across all runs')
+
+```
+
+To identify which set of parameters to use, we can identify the combination that has the lowest error.  
+
+```{r}
+
+paramVals.ubcf <- finalErrors.ubcf %>%
+  filter(ERROR_MEAN == min(finalErrors.ubcf$ERROR_MEAN))
+
+paramVals.ubcf
+
+```
+
+This is the set of parameters we will use for the final comparison. 
 
 
-# Recommendation Algorithm: Item-Item Collaborative Filtering
+### Item-Item Collaborative Filtering
+**Item-based collaborative filtering**: This recommends to a user the items that are most similar on the user's previous ratings. We will follow this process:
 
+1. Measure the similarity in rating between every pair of movies.
+2. Identify the k-most similar movies for each movie title. 
+3. Identify the movies most similar to previous rated movies for each user. 
+
+Here, we mimic our prior approach to user-based collaborative filtering.
+
+```{r}
+# recommend 5 movies to each user
+n_recommended_i <- 5
+
+# create model on training set
+recc_model_i <- Recommender(data = train_set, method = "IBCF", parameter = list(method = 'cosine', k = 5, normalize = 'center'))
+
+# predict on test set
+recc_predict_i <- predict(object = recc_model_i, newdata = test_set, n = n_recommended_i)
+
+# create a matrix of predictions
+recc_matrix_i <- sapply(recc_predict_i@items, function(x){
+  colnames(most_rated)[x]
+})
+
+# plot distribution of movie recommendations
+numRec_i <- factor(table(recc_matrix_i))
+qplot(numRec_i,
+      main = 'Distribution of Movie Recommendations',
+      ylab='Number of Movies',
+      xlab = 'Times Recommended')
+```
+
+```{r}
+# function to calculate error 
+errorCalc_i <- function(e, sm, kn, nrm, evl){
+  set.seed(200)
+  # create a user-based CF recommender using training data
+  rec <- Recommender(getData(e, "train"), evl, parameter = list(method = sm, k = kn, normalize = nrm))
+  
+  # create predictions for the test data using known ratings 
+  pred <- predict(rec, getData(e, "known"), type="ratings")
+  
+  # avg error metrics per user, avgd over all recommendations
+  error.ibcf <-calcPredictionAccuracy(pred, getData(e, "unknown"))
+  error.ibcf <- c(error.ibcf, sm, kn, nrm)
+  names(error.ibcf) <- c('RMSE', 'MSE', 'MAE','similarity', 'neighbor items', 'norm')
+  return(error.ibcf)
+}
+```
+
+```{r}
+# Model parameters
+simMethod <- c('cosine', 'pearson', 'jaccard')
+vector_k <- seq(5, 100, 5)
+norm <- c('center', 'Z-score')
+evalType <- "IBCF"
+
+# 10-fold cross validation, good ratings = 3, withholding 10 items for eval
+e <- evaluationScheme(most_rated, method = "cross-validation", k=10, given = 10, goodRating=3)
+
+# create list for errors
+errors.names <- c("RMSE", "MSE", "MAE", 'similarity', 'k-closest items', 'norm')
+ibcfErrors.ls <- vector("list", length(errors.names))
+names(ibcfErrors.ls) <- errors.names
+for (i in simMethod) {
+  for (j in vector_k) {
+    for (k in norm){
+      ibcfErrors.ls <- rbind(ibcfErrors.ls, errorCalc_i(e, i, j, k, evalType))
+    }
+  }
+}
+```
+
+```{r}
+# Pulling lists of errors into dataframe
+finalErrors.ibcf <- as.data.frame(ibcfErrors.ls) %>%
+  filter(RMSE != 'NULL') %>%
+  mutate(RMSE = as.double(RMSE),
+         MSE = as.double(MSE), 
+         MAE = as.double(MAE)) 
+
+# Adding a column containing mean error
+finalErrors.ibcf$ERROR_MEAN<- rowMeans(subset(finalErrors.ibcf, select = c(RMSE, MSE, MAE)), na.rm = TRUE)
+
+# Plotting the errors
+ggplot(finalErrors.ibcf, aes(1:nrow(finalErrors.ibcf))) +                    
+  geom_line(aes(y=RMSE), colour="red") +  
+  geom_line(aes(y=MSE), colour="green") + 
+  geom_line(aes(y=MAE), colour="blue") +
+  geom_line(aes(y=ERROR_MEAN), colour="purple") +
+  xlab('Trial Run') +
+  ylab('Error') +
+  ggtitle('Errors across all runs')
+```
+
+The combination of parameters that minimizes the mean error includes Pearson's correlation, 100 neighbors, and Z-score normalization.
+```{r}
+# Finding parameter values that minimize the mean error
+paramVals.ibcf <- finalErrors.ibcf %>%
+  filter(ERROR_MEAN == min(finalErrors.ibcf$ERROR_MEAN))
+paramVals.ibcf
+```
+
+### Evaluation
+
+For our final evaluation, we compare the user-user and item-item based models, each optimized with those combinations of parameters that minimize mean error. We plot a ROC curve and Precision-recall for each model, and then
+
+**User-based collaborative filtering**
+```{r}
+# Results of model that minimizes mean error
+results.ubcf <- evaluate(e, 'UBCF', parameter = list(method = 'cosine', 
+                                      nn = 100, 
+                                      normalize = 'center'))
+
+# Plotting True Positive Rate (TPR) against False Positive Rate (FPR)
+avgResults.ubcf <- as.data.frame(avg(results.ubcf))
+plot(avgResults.ubcf$FPR, avgResults.ubcf$TPR)
+
+# Plotting Precision-recall
+plot(results.ubcf, "prec/rec", annotate = TRUE, main = "Precision-recall")
+```
+
+**Item-based collaborative filtering**
+```{r}
+# Evaluating using the parameter values - Pearson's, k = 100, Z-score normalization
+results.ibcf <- evaluate(e, 'IBCF', parameter = list(method = paramVals.ibcf[[4]], 
+                                                     k = as.integer(paramVals.ibcf[[5]]), 
+                                                     normalize = paramVals.ibcf[[6]]))
+
+# Plotting ROC curve and Precision-recall
+plot(results.ibcf, annotate = TRUE, main = "ROC curve")
+plot(results.ibcf, "prec/rec", annotate = TRUE, main = "Precision-recall")
+```
+
+**Comparison**
+```{r}
+# UBCF and IBCF models with optimal parameters
+models_to_evaluate <- list(results.ubcf = list(name = "UBCF", param = list(method = 'cosine',
+                                                                      nn = 100,
+                                                                      normalize = 'center')),
+                           results.ibcf = list(name = "IBCF", param = list(method = paramVals.ibcf[[4]], 
+                                                                      k = as.integer(paramVals.ibcf[[5]]), 
+                                                                      normalize = paramVals.ibcf[[6]])))
+# Evaluating at various numbers of recommendations
+n_recommendations <- seq(5, 100, 5)                          
+list_results <- evaluate(e, method = models_to_evaluate, n = n_recommendations)
+```
+
+```{r}
+# Plotting and comparing ROC curve and Precision-recall for each model
+plot(list_results, legend = "topleft", main = "ROC curve")
+plot(list_results, "prec/rec", legend = "bottomright", main = "Precision-recall")
+```
 
 # Discussion
-
-# Conclusion
+This analysis suggests that, for our subset of the MovieLense dataset, a user-based collaborative filtering model with optimal model parameters outperforms its item-based collaborative filtering counterpart.
 
 # References
-Hahsler, M. (2019, August 27). MovieLense Dataset (100k). Rdrr.Io. https://rdrr.io/cran/recommenderlab/man/MovieLense.html
+Hahsler, M. (2019, August 27). MovieLense Dataset (100k). Rdrr.Io. https://rdrr.io/cran/recommenderlab/man/MovieLense.html  
+  
+“Recommender Systems 101 – a Step by Step Practical Example in R.” R, 24 Dec. 2014, www.r-bloggers.com/recommender-systems-101-a-step-by-step-practical-example-in-r/.
 
 
