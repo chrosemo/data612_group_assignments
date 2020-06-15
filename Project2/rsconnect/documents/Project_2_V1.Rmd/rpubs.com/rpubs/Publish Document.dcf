@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/627598/f793ab848b4942f4ad75d8da8e9cb062
+bundleId: https://api.rpubs.com/api/v1/document/627598/f793ab848b4942f4ad75d8da8e9cb062
+url: http://rpubs.com/amberferger/627598
+when: 1592228448.55774

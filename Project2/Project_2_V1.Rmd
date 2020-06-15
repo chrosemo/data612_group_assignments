@@ -39,8 +39,8 @@ library(ggplot2)
 
 
 ### Load Data
-Our data is stored as a *realRatingMatrix*, where each row represents a user and each column represents a movie. We can see that there are a total of 99,392 ratings, which means that not every user has watched every movie. This means that our matrix is sparse -- most cells have no information.
-```{r}
+Our data is stored as a *realRatingMatrix*, where each row represents a user and each column represents a movie. We can see that there are a total of 99,392 ratings, so not every user has watched every movie. This means that our matrix is sparse -- most cells have no information.
+```{r, warning=FALSE}
 set.seed(200)
 data("MovieLense")
 movielense <- MovieLense@data
@@ -50,12 +50,12 @@ show(MovieLense)
 
 # Explore Data Set
 
-With reference to code by (Hahsler, 2019), we did some exploration of the dataset so that we get get a sense of the how ratings are distributed according to user and item. This will inform how we will subset the data for modeling.
+With reference to code by (Hahsler, 2019), we did some exploration of the dataset so that we get a sense of the how ratings are distributed according to user and item. This will inform how we will subset the data for modeling.
 
 
 ### Distribution of ratings by user and item
 First, we can take a look at the number of ratings per user. 
-```{r}
+```{r,warning=FALSE}
 ## number of ratings per user using base R
 hist(rowCounts(MovieLense))
 ```
@@ -64,7 +64,7 @@ The data is severely right skewed, which indicates that most users have only rat
   
 Next, we can take a look at the number of ratings per movie.
 
-```{r}
+```{r, warning=FALSE}
 ## number of ratings per movie using base R
 hist(colCounts(MovieLense))
 ```
@@ -86,16 +86,17 @@ movielense %>%
   labs(title = " Overall Distribution of Ratings", y = "", x = "Ratings") +
   theme_minimal()
 ```
+
 The overall distribution of ratings is left skewed, indicating that people tend to rate movies more positively. The mean rating is confirmed below:
 
-```{r}
+```{r, warning=FALSE}
 ## mean rating (averaged over users)
 mean(rowMeans(MovieLense))
 ```
 
 ### View of meta data and heatmap of ratings
-The format of MovieLenseMeta is a data frame with movie title, year, IMDb URL and indicator variables for 19 genres. See below view of meta data
-```{r}
+The format of MovieLenseMeta is a data frame with movie title, year, IMDb URL and indicator variables for 19 genres.
+```{r, warning=FALSE}
 # View the meta data:
 movie_meta <- MovieLenseMeta
 str(movie_meta)
@@ -103,7 +104,7 @@ str(movie_meta)
 
 
 We can also build out a heatmap of the most relevant users/movies. This will consist of the users that rated the most movies and the movies that have the most ratings. Dark columns represent highly rated movies and dark rows represent users that give high ratings. This indicates the need for normalization of the data -- we don't want to skew the results from users that predominantly rank high or low. 
-```{r}
+```{r,warning=FALSE}
 min_n_movies <- quantile(rowCounts(MovieLense), 0.99)
 min_n_users <- quantile(colCounts(MovieLense), 0.99)
 
@@ -121,7 +122,7 @@ Our data prep will involve: selecting relevant data (movies that have a lot of r
 
 It is obvious that the dataset is very sparse. It includes many individuals that rated very few movies, and many movies that have very few ratings. In order to have a healthy baseline on which to our build recommendation models, we will take into consideration those users who have rated at least 50 movies and those movies that are rated by at least 100 users. A look at the disribution of average rating per user shows us that we have a large variation across the subset.  
 
-```{r}
+```{r, warning=FALSE}
 # base population
 most_rated <- MovieLense[rowCounts(MovieLense) > 50, colCounts(MovieLense) > 100]
 average_ratings_per_user <- rowMeans(most_rated)
@@ -134,7 +135,7 @@ ggtitle("Distribution of the average rating per user")
 ### Split into training and testing
 Next, we can split the data into train and test sets. We are left with 462 records in the training set and 98 records in the test set.
 
-```{r}
+```{r, warning=FALSE}
 # split the dataset into test set and train set
 which_train <- sample(x = c(TRUE, FALSE), size = nrow(most_rated), replace = TRUE, prob = c(0.8, 0.2))
 train_set <- most_rated[which_train, ]
@@ -166,7 +167,7 @@ The parameters for this approach are similar to those of the item-item filtering
   
 We'll start off with a simple, non-optimized user-user based model to get a feel for the functions. We'll use our train set to create the model and our test set to get recommendations on. Here, we've defined the number of recommendations as 5, the similarity method as cosine, and the number of neighbors as 5. We'll plot the distribution of recommendations. 
 
-```{r}
+```{r,warning=FALSE}
 # recommend 5 movies to each user
 n_recommended <- 5
 
@@ -195,7 +196,7 @@ We can see that that most movies are recommended only a few times.
   
 Now, we can optimize our model by tweaking the similarity method, number of neighbors, and normalization type. We'll create a function to calculate and record the RMSE, MSE, and MAE for each set of parameters. 
 
-```{r}
+```{r, warning=FALSE}
 set.seed(200)
 
 # function to calculate error 
@@ -231,7 +232,7 @@ errorCalc <- function(e, sm, nb, nrm, evl){
 ```
 
 In this case, we'll define an evaluation scheme that consists of 10-fold cross validation with a "good rating" defined as 3. We will cycle through all parameter combinations to identify what the optimal combination is. 
-``` {r}
+``` {r, warning=FALSE}
 # cycle through all parameter combinations
 simMethod <- c('cosine', 'pearson', 'jaccard')
 neighbors <- seq(5,100,5)
@@ -258,7 +259,7 @@ for (i in simMethod){
 ```
 
 We can now visualize our errors: 
-```{r}
+```{r, warning=FALSE}
 
 finalErrors.ubcf <- as.data.frame(ubcfErrors.ls) %>%
   filter(RMSE != 'NULL') %>%
@@ -281,7 +282,7 @@ ggplot(finalErrors.ubcf, aes(1:nrow(finalErrors.ubcf))) +
 
 To identify which set of parameters to use, we can identify the combination that has the lowest error.  
 
-```{r}
+```{r, warning=FALSE}
 
 paramVals.ubcf <- finalErrors.ubcf %>%
   filter(ERROR_MEAN == min(finalErrors.ubcf$ERROR_MEAN))
@@ -302,7 +303,7 @@ This is the set of parameters we will use for the final comparison.
 
 Here, we mimic our prior approach to user-based collaborative filtering.
 
-```{r}
+```{r, warning=FALSE}
 # recommend 5 movies to each user
 n_recommended_i <- 5
 
@@ -325,7 +326,11 @@ qplot(numRec_i,
       xlab = 'Times Recommended')
 ```
 
-```{r}
+The results are very similar to UBCF -- there are a large number of movies that are only recommended once. 
+  
+Next, we'll define a IBCF-specific function that will calculate the error associated with differing parameters.
+
+```{r, warning=FALSE}
 # function to calculate error 
 errorCalc_i <- function(e, sm, kn, nrm, evl){
   set.seed(200)
@@ -343,7 +348,9 @@ errorCalc_i <- function(e, sm, kn, nrm, evl){
 }
 ```
 
-```{r}
+Finally, we'll cycle through all combinations of our parameters and calculate the error associated with each.
+
+```{r, warning=FALSE}
 # Model parameters
 simMethod <- c('cosine', 'pearson', 'jaccard')
 vector_k <- seq(5, 100, 5)
@@ -366,7 +373,8 @@ for (i in simMethod) {
 }
 ```
 
-```{r}
+We can identify which set of parameters yields the lowest average error. We will use this as the basis of comparison against the UBCF methodology. 
+```{r, warning=FALSE}
 # Pulling lists of errors into dataframe
 finalErrors.ibcf <- as.data.frame(ibcfErrors.ls) %>%
   filter(RMSE != 'NULL') %>%
@@ -388,8 +396,8 @@ ggplot(finalErrors.ibcf, aes(1:nrow(finalErrors.ibcf))) +
   ggtitle('Errors across all runs')
 ```
 
-The combination of parameters that minimizes the mean error includes Pearson's correlation, 100 neighbors, and Z-score normalization.
-```{r}
+The combination of parameters that minimizes the mean error includes Pearson's correlation, 100 neighbors, and Z-score normalization. Already, we can see that the error using the IBCF methodology is much higher than the UBCF methodology.
+```{r, warning=FALSE}
 # Finding parameter values that minimize the mean error
 paramVals.ibcf <- finalErrors.ibcf %>%
   filter(ERROR_MEAN == min(finalErrors.ibcf$ERROR_MEAN))
@@ -398,29 +406,26 @@ paramVals.ibcf
 
 ### Evaluation
 
-For our final evaluation, we compare the user-user and item-item based models, each optimized with those combinations of parameters that minimize mean error. We plot a ROC curve and Precision-recall for each model, and then
+For our final evaluation, we compare the user-user and item-item based models, each optimized with those combinations of parameters that minimize mean error. We plot a ROC curve and Precision-recall for each model, and then examine the differences.
 
 **User-based collaborative filtering**
-```{r}
+```{r, warning = FALSE}
 # Results of model that minimizes mean error
 results.ubcf <- evaluate(e, 'UBCF', parameter = list(method = 'cosine', 
                                       nn = 100, 
                                       normalize = 'center'))
 
 # Plotting True Positive Rate (TPR) against False Positive Rate (FPR)
-avgResults.ubcf <- as.data.frame(avg(results.ubcf))
-plot(avgResults.ubcf$FPR, avgResults.ubcf$TPR)
+plot(results.ubcf, annotate = TRUE, main = "ROC curve")
 
 # Plotting Precision-recall
-plot(results.ubcf, "prec/rec", annotate = TRUE, main = "Precision-recall")
+plot(results.ubcf, "prec/rec", annotate = TRUE, main = "Precision-recall - UBCF")
 ```
 
 **Item-based collaborative filtering**
-```{r}
+```{r, warning = FALSE}
 # Evaluating using the parameter values - Pearson's, k = 100, Z-score normalization
-results.ibcf <- evaluate(e, 'IBCF', parameter = list(method = paramVals.ibcf[[4]], 
-                                                     k = as.integer(paramVals.ibcf[[5]]), 
-                                                     normalize = paramVals.ibcf[[6]]))
+results.ibcf <- evaluate(e, 'IBCF', parameter = list(method = paramVals.ibcf[[4]], k = as.integer(paramVals.ibcf[[5]]), normalize = paramVals.ibcf[[6]]))
 
 # Plotting ROC curve and Precision-recall
 plot(results.ibcf, annotate = TRUE, main = "ROC curve")
@@ -428,20 +433,18 @@ plot(results.ibcf, "prec/rec", annotate = TRUE, main = "Precision-recall")
 ```
 
 **Comparison**
-```{r}
+Finally, we can compare the UBCF and IBCF models to each other.
+```{r, warning=FALSE}
 # UBCF and IBCF models with optimal parameters
-models_to_evaluate <- list(results.ubcf = list(name = "UBCF", param = list(method = 'cosine',
-                                                                      nn = 100,
-                                                                      normalize = 'center')),
-                           results.ibcf = list(name = "IBCF", param = list(method = paramVals.ibcf[[4]], 
-                                                                      k = as.integer(paramVals.ibcf[[5]]), 
-                                                                      normalize = paramVals.ibcf[[6]])))
+models_to_evaluate <- list(results.ubcf = list(name = "UBCF", param = list(method = 'cosine', nn = 100, normalize = 'center')),
+                           results.ibcf = list(name = "IBCF", param = list(method = paramVals.ibcf[[4]], k = as.integer(paramVals.ibcf[[5]]), normalize = paramVals.ibcf[[6]])))
+
 # Evaluating at various numbers of recommendations
 n_recommendations <- seq(5, 100, 5)                          
 list_results <- evaluate(e, method = models_to_evaluate, n = n_recommendations)
 ```
 
-```{r}
+```{r, warning = FALSE}
 # Plotting and comparing ROC curve and Precision-recall for each model
 plot(list_results, legend = "topleft", main = "ROC curve")
 plot(list_results, "prec/rec", legend = "bottomright", main = "Precision-recall")
