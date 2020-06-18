@@ -57,7 +57,8 @@ library(knitr)
 library(dplyr)
 library(Rfast)
 library(recommenderlab)
-
+library(kableExtra)
+library(tictoc)
 ```
 
 # Data Cleansing 
@@ -116,6 +117,7 @@ calcError <- function(dim){
   # SVD with specified number of factors
   tempRated <- most_rated
   SVD <- svd(tempRated@data, nu = dim, nv = dim)
+  
   finalMatrix <- SVD$u %*% diag(SVD$d[1:dim]) %*% t(SVD$v)
   tempRated@data <- as(finalMatrix, 'dgCMatrix')
   
@@ -124,31 +126,34 @@ calcError <- function(dim){
 }
 
   # # train/test split - 80/20
-  # e <- evaluationScheme(tempRated, method="split", train=0.8, 
-  #     k=1, given=15)
-  # 
+ #  e <- evaluationScheme(tempRated, method="split", train=0.8, 
+   #    k=1, given=15)
+  
   # # build recommender
-  # rec <- Recommender(getData(e, "train"), 
-  #                      'UBCF', 
-  #                      parameter = list(method = 'cosine', 
-  #                                       nn = 100, 
-  #                                       normalize = 'center'))
-  #   
+   #rec <- Recommender(getData(e, "train"), 
+   #                   'UBCF', 
+   #                     parameter = list(method = 'cosine', 
+   #                                    nn = 100, 
+   #                                    normalize = 'center'))
+    
   # # create predictions for the test data using known ratings 
-  # pred <- predict(rec, getData(e, "known"), type="ratings")
-  #   
+  #pred <- predict(rec, getData(e, "known"), type="ratings")
+  #  
   # # avg error metrics per user, avgd over all recommendations
-  # error.ubcf <- calcPredictionAccuracy(pred, getData(e, "unknown"))
-  # 
-  # error.ubcf <- c(dim, error.ubcf)
-  # names(error.ubcf) <- c('k', 'RMSE', 'MSE', 'MAE')
-  # 
+  #error.ubcf <- calcPredictionAccuracy(pred, getData(e, "unknown"))
+  
+  #error.ubcf <- c(dim, error.ubcf)
+  #names(error.ubcf) <- c('k', 'RMSE', 'MSE', 'MAE')
+  
 ```
+
+
 
 ```{r}
 
 nDim <- 2:min(nrow(most_rated@data), ncol(most_rated@data))
 RMSE.ls <- lapply(nDim, calcError)
+#RMSE.ls
 
 plot(unlist(RMSE.ls),
      main = 'RMSE vs k',
@@ -166,6 +171,71 @@ names(ubcfErrors.ls) <- errors.names
 
 
 ```
+
+#Alternative
+
+The evaluationscheme class provided in recommenderlab enables the creation of a train test strategy which allows for an analysis of the performance of a recommendation engine.(R Data Analysis Projects, 2010)
+```{r}
+set.seed(200)
+eval <- evaluationScheme(most_rated, method = "split",
+                         train = 0.8, given= 20, goodRating=3)
+#eval
+#Extract train and test data
+train <- getData(eval, "train")
+known <- getData(eval, "known")
+unknown <- getData(eval, "unknown")
+```
+
+
+# Build Recommender system (SVD VS UBCF)
+An engine will be built using SVD and another using UBCF. The  performance of the two will be compared according to learning and predicting speed  and prediction accuracy.The tictoc library will be used to track build time ((jumpingrivers, 2017)) and  accuracy will be compared across RSME values. 
+
+###UBCF Model
+```{r}
+
+tic("UBCF_Model - Train")
+modelUBCF <- Recommender(train, method = "UBCF")
+toc(log = TRUE, quiet = TRUE)
+
+tic("UBCF_Model - Predict")
+predUBCF <- predict(modelUBCF, newdata = known, type = "ratings")
+toc(log = TRUE, quiet = TRUE)
+
+ (UBCF_acc <- calcPredictionAccuracy(predUBCF, unknown, byUser = TRUE) )
+kable(head(UBCF_acc)) %>% kable_styling(bootstrap_options = "striped", font_size = 12, full_width = F)
+
+```
+
+
+
+```{r}
+
+#tic("SVD_Model - Train")
+modelSVD <- Recommender(train, method = "SVD", parameter = list(k = 20))
+toc(log = TRUE, quiet = TRUE)
+
+#tic("SVD_Model - Predict")
+predSVD <- predict(modelSVD, newdata = known, type = "ratings")
+toc(log = TRUE, quiet = TRUE)
+
+ SVDacc <- calcPredictionAccuracy(predSVD, unknown, byUser = TRUE) 
+ 
+kable(head(SVDacc)) %>% kable_styling(bootstrap_options = "striped", font_size = 12, full_width = F)
+```
+In this sample,in terms of accuracy,  UCBF seems to perform better than SVD. UCBF produced significantly better RSME vallues than SVD. Further investigation is needed. 
+
+
+# Compare Run time
+
+```{r}
+
+log <- as.data.frame(unlist(tic.log(format = TRUE)))
+colnames(log) <- c("Run Time")
+knitr::kable(log, format = "html") %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+
 # Evaluation
 
 # Discussion
@@ -174,4 +244,13 @@ names(ubcfErrors.ls) <- errors.names
 
 # Reference
 https://stats.stackexchange.com/questions/28576/filling-nas-in-a-dataset-with-column-medians-in-r
+
+R Data Analysis Projects. (2010). Google Books. https://books.google.gy/books?id=pkFPDwAAQBAJ&pg=PA141&lpg=PA141&dq=evaluationScheme&source=bl&ots=66LnidAaND&sig=ACfU3U3csRZ4e1YGZhdwpSwajgTQjSe3rg&hl=en&sa=X&ved=2ahUKEwjWxdTZmovqAhXohHIEHZR7D40Q6AEwCXoECAoQAQ#v=onepage&q=evaluationScheme&f=false
+
+jumpingrivers. (2017, November 19). Timing in R - Jumping Rivers. Jumping Rivers. https://www.jumpingrivers.com/blog/timing-in-r/
+
+Hahsler, M. (2019, August 27). Calculate the Prediction Error for a Recommendation. Rdrr.Io. https://rdrr.io/cran/recommenderlab/man/calcPredictionAccuracy.html
+
+
+
 
