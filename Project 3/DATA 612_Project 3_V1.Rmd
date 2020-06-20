@@ -105,74 +105,105 @@ We can see that our matrix now contains 185,920 ratings, which means that our im
 We can now perform SVD on our matrix. 
 
 ```{r}
-###################
+#Calculate RMSE
+RMSE <- function(matrix, predictions) sqrt(sum((matrix - predictions)^2, na.rm = TRUE)/sum(!is.na(matrix)))
 
-RMSE <- function(pred,act){
-  sqrt(mean((pred - act)^2))
-}
-
-
+# Calculate RMSE based on number of dimensions
 calcError <- function(dim){
-  
   # SVD with specified number of factors
   tempRated <- most_rated
   SVD <- svd(tempRated@data, nu = dim, nv = dim)
-  
   finalMatrix <- SVD$u %*% diag(SVD$d[1:dim]) %*% t(SVD$v)
   tempRated@data <- as(finalMatrix, 'dgCMatrix')
-  
   # calculate RMSE
   return(RMSE(tempRated@data, most_rated@data))
 }
-
-  # # train/test split - 80/20
- #  e <- evaluationScheme(tempRated, method="split", train=0.8, 
-   #    k=1, given=15)
-  
-  # # build recommender
-   #rec <- Recommender(getData(e, "train"), 
-   #                   'UBCF', 
-   #                     parameter = list(method = 'cosine', 
-   #                                    nn = 100, 
-   #                                    normalize = 'center'))
-    
-  # # create predictions for the test data using known ratings 
-  #pred <- predict(rec, getData(e, "known"), type="ratings")
-  #  
-  # # avg error metrics per user, avgd over all recommendations
-  #error.ubcf <- calcPredictionAccuracy(pred, getData(e, "unknown"))
-  
-  #error.ubcf <- c(dim, error.ubcf)
-  #names(error.ubcf) <- c('k', 'RMSE', 'MSE', 'MAE')
-  
 ```
 
-
-
 ```{r}
-
+# Calculating RMSE at each dimension of non-reduced data
 nDim <- 2:min(nrow(most_rated@data), ncol(most_rated@data))
 RMSE.ls <- lapply(nDim, calcError)
 #RMSE.ls
-
+# Plot of RMSE relative to number of dimensions k
 plot(unlist(RMSE.ls),
      main = 'RMSE vs k',
      xlab = 'k',
      ylab = 'RMSE')
-
 ```
 
+# Dimensionality reduction
+```{r}
+# Normalize (center) the ratings matrix
+trim <- normalize(most_rated, method = "center")
+
+# Perform SVD on normalized matrix
+SVD <- svd(trim@data)
+
+# Table of variances for each dimension
+variance.table <- prop.table(SVD$d^2)
+
+# Determining number of dimensions that explain ~90% of total variance
+n_dims <- 0
+total_variance <- 0
+for (i in 1:length(variance.table)) {
+  total_variance <- total_variance + variance.table[i]
+  ifelse(total_variance <= 0.90, n_dims <- n_dims + 1, break)
+}
+
+# Calculating trimmed prediction matrix
+trimMatrix <- SVD$u[,1:n_dims] %*% diag(SVD$d[1:n_dims]) %*% t(SVD$v[,1:n_dims])
+trim@data <- as(trimMatrix, 'dgCMatrix')
+trim@data@Dimnames <- most_rated@data@Dimnames
+```
+
+# UBCF recommender built on reduced data
+```{r}
+# Split trimmed data
+set.seed(200)
+e_trim <- evaluationScheme(trim, method="split", train=0.8, given=15, goodRating = 3)
+  
+# Build recommender on train data
+rec_trim <- Recommender(getData(e_trim, "train"), 'UBCF', parameter = list(method = 'cosine', 
+                                                                 nn = 100, 
+                                                                 normalize = 'center'))
+    
+# Create predictions for the test data using known ratings 
+pred_trim <- predict(rec_trim, getData(e, "known"), type="ratings")
+ 
+# Avg error metrics per user, avgd over all recommendations
+error_trim <- calcPredictionAccuracy(pred_trim, getData(e, "unknown"))
+#error.ubcf <- c(dim, error.ubcf)
+#names(error.ubcf) <- c('k', 'RMSE', 'MSE', 'MAE')
+```
+
+# UBCF recommender built on data before reduction
+```{r}
+# Split non-trimmed data
+set.seed(200)
+e <- evaluationScheme(most_rated, method = "split", train = 0.8, given = 15, goodRating = 3)
+
+# Build recommender
+recc_ubcf <- Recommender(getData(e, "train"), "ubcf", parameter = list(method = 'cosine',
+                                                                       nn = 100,
+                                                                       normalize = 'center'))
+
+# create predictions for the test data using known ratings 
+pred_ubcf <- predict(recc_ubcf, getData(e, "known"), type="ratings")
+
+# Avg error metrics per user, avgd over all recommendations
+error_ubcf <- calcPredictionAccuracy(pred_ubcf, getData(e, "unknown"))
+error_ubcf
+```
 
 ```{r}
 # create list for errors
-errors.names <- c('k', "RMSE", "MSE", "MAE")
-ubcfErrors.ls <- vector("list", length(errors.names))
-names(ubcfErrors.ls) <- errors.names
-
-
+#errors.names <- c('k', "RMSE", "MSE", "MAE")
+#ubcfErrors.ls <- vector("list", length(errors.names))
+#names(ubcfErrors.ls) <- errors.names
 ```
 
-#Alternative
+# Alternative
 
 The evaluationscheme class provided in recommenderlab enables the creation of a train test strategy which allows for an analysis of the performance of a recommendation engine.(R Data Analysis Projects, 2010)
 ```{r}
