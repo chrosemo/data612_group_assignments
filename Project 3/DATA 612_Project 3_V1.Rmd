@@ -100,18 +100,22 @@ most_rated
 ```
 We can see that our matrix now contains 185,920 ratings, which means that our imputation successfully replaced all missing values.  
 
-# Singular Value Decomposition (SVD)
 
-We can now perform SVD on our matrix. 
+# Singular Value Decomposition (SVD) - RMSE against Actual Set
+
+We can now perform SVD on our matrix and examine the effect of varying the number of latent factors $(k)$. We can visualize the RMSE between the actual user-rating matrix and the decomposed matrix. 
+  
+We will define 2 functions - one to calculate the RMSE between the predicted matrix (from SVD) and the actual matrix and one to perform SVD on the original matrix.
 
 ```{r}
-###################
+####################### functions
 
+# RMSE function for the SVD
 RMSE <- function(pred,act){
-  sqrt(mean((pred - act)^2))
+  list(RMSE.SVD = sqrt(mean((pred - act)^2)))
 }
 
-
+# error calculation for SVD
 calcError <- function(dim){
   
   # SVD with specified number of factors
@@ -121,39 +125,21 @@ calcError <- function(dim){
   finalMatrix <- SVD$u %*% diag(SVD$d[1:dim]) %*% t(SVD$v)
   tempRated@data <- as(finalMatrix, 'dgCMatrix')
   
-  # calculate RMSE
-  return(RMSE(tempRated@data, most_rated@data))
+  # calculate RMSE for k-reduction
+  errors.ls <- RMSE(tempRated@data, most_rated@data)
+  
+  # return list of k and RMSE for SVD
+  return(errors.ls)
 }
 
-  # # train/test split - 80/20
- #  e <- evaluationScheme(tempRated, method="split", train=0.8, 
-   #    k=1, given=15)
-  
-  # # build recommender
-   #rec <- Recommender(getData(e, "train"), 
-   #                   'UBCF', 
-   #                     parameter = list(method = 'cosine', 
-   #                                    nn = 100, 
-   #                                    normalize = 'center'))
-    
-  # # create predictions for the test data using known ratings 
-  #pred <- predict(rec, getData(e, "known"), type="ratings")
-  #  
-  # # avg error metrics per user, avgd over all recommendations
-  #error.ubcf <- calcPredictionAccuracy(pred, getData(e, "unknown"))
-  
-  #error.ubcf <- c(dim, error.ubcf)
-  #names(error.ubcf) <- c('k', 'RMSE', 'MSE', 'MAE')
-  
 ```
 
-
+Now that the functions are defined, we can cycle through varying sizes of $k$ and calculate the RMSE. We can see from the plot that as the $k$ increases, the RMSE decreases. 
 
 ```{r}
-
+# start at 2 dimensions so that the diagnonal rxr matrix can be built
 nDim <- 2:min(nrow(most_rated@data), ncol(most_rated@data))
 RMSE.ls <- lapply(nDim, calcError)
-#RMSE.ls
 
 plot(unlist(RMSE.ls),
      main = 'RMSE vs k',
@@ -163,14 +149,65 @@ plot(unlist(RMSE.ls),
 ```
 
 
-```{r}
-# create list for errors
-errors.names <- c('k', "RMSE", "MSE", "MAE")
-ubcfErrors.ls <- vector("list", length(errors.names))
-names(ubcfErrors.ls) <- errors.names
 
+# Singular Value Decomposition (SVD) - RMSE in predictions
+```{r}
+# recommender error with varying pcts for k-reduction
+recError <- function(k_pct) {
+  
+  # create recommender system
+  tic("SVD_Model - Train")
+  modelSVD <- Recommender(train, 
+                          method = "SVD", 
+                          parameter = list(k = k_pct))
+  toc(log = TRUE, quiet = TRUE)
+  
+  # predict on known data
+  tic("SVD_Model - Predict")
+  predSVD <- predict(modelSVD, newdata = known, type = "ratings")
+  toc(log = TRUE, quiet = TRUE)
+  
+  # calculate accuracy
+  acc <- calcPredictionAccuracy(predSVD, unknown)
+  
+  # create list of percentage used for recommender system & accuracy
+  #acc.ls <- c(k_pct = k_pct, acc)
+  return(acc)
+}
 
 ```
+
+# calculate 
+```{r}
+pctDim <- 2:100
+
+recError.ls <- lapply(pctDim,recError)
+recError.df <- data.frame(do.call('rbind',recError.ls))
+recError.df$ERROR_MEAN<- rowMeans(recError.df)
+
+
+ggplot(recError.df, aes(1:nrow(recError.df))) +                   
+  geom_line(aes(y=RMSE), colour="red") +  
+  geom_line(aes(y=MSE), colour="green") + 
+  geom_line(aes(y=MAE), colour="blue") +
+  geom_line(aes(y=ERROR_MEAN), colour="purple") +
+  xlab('k-pct') +
+  ylab('Error') +
+  ggtitle('Errors across all runs') 
+
+
+plot(unlist(RMSE.ls),
+     main = 'RMSE vs k',
+     xlab = 'k',
+     ylab = 'RMSE')
+
+plot(recError.df$RMSE,
+     main = 'Error for k-% reduction',
+     xlab = 'k-pct',
+     ylab = '')
+
+```
+
 
 #Alternative
 
@@ -193,15 +230,19 @@ An engine will be built using SVD and another using UBCF. The  performance of th
 ###UBCF Model
 ```{r}
 
+# training the model with UBCF methodology
 tic("UBCF_Model - Train")
 modelUBCF <- Recommender(train, method = "UBCF")
 toc(log = TRUE, quiet = TRUE)
 
+# predicting on known data
 tic("UBCF_Model - Predict")
 predUBCF <- predict(modelUBCF, newdata = known, type = "ratings")
 toc(log = TRUE, quiet = TRUE)
 
- (UBCF_acc <- calcPredictionAccuracy(predUBCF, unknown, byUser = TRUE) )
+# calculating accuracy by user
+UBCF_acc <- calcPredictionAccuracy(predUBCF, unknown, byUser = TRUE)
+
 kable(head(UBCF_acc)) %>% kable_styling(bootstrap_options = "striped", font_size = 12, full_width = F)
 
 ```
@@ -209,7 +250,6 @@ kable(head(UBCF_acc)) %>% kable_styling(bootstrap_options = "striped", font_size
 
 
 ```{r}
-
 #tic("SVD_Model - Train")
 modelSVD <- Recommender(train, method = "SVD", parameter = list(k = 20))
 toc(log = TRUE, quiet = TRUE)
@@ -218,8 +258,8 @@ toc(log = TRUE, quiet = TRUE)
 predSVD <- predict(modelSVD, newdata = known, type = "ratings")
 toc(log = TRUE, quiet = TRUE)
 
- SVDacc <- calcPredictionAccuracy(predSVD, unknown, byUser = TRUE) 
- 
+SVDacc <- calcPredictionAccuracy(predSVD, unknown, byUser = TRUE) 
+
 kable(head(SVDacc)) %>% kable_styling(bootstrap_options = "striped", font_size = 12, full_width = F)
 ```
 In this sample,in terms of accuracy,  UCBF seems to perform better than SVD. UCBF produced significantly better RSME vallues than SVD. Further investigation is needed. 
