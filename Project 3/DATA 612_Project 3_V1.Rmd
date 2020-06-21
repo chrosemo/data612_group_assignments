@@ -169,10 +169,10 @@ rec_trim <- Recommender(getData(e_trim, "train"), 'UBCF', parameter = list(metho
                                                                  normalize = 'center'))
     
 # Create predictions for the test data using known ratings 
-pred_trim <- predict(rec_trim, getData(e, "known"), type="ratings")
+pred_trim <- predict(rec_trim, getData(e_trim, "known"), type="ratings")
  
 # Avg error metrics per user, avgd over all recommendations
-error_trim <- calcPredictionAccuracy(pred_trim, getData(e, "unknown"))
+error_trim <- calcPredictionAccuracy(pred_trim, getData(e_trim, "unknown"))
 #error.ubcf <- c(dim, error.ubcf)
 #names(error.ubcf) <- c('k', 'RMSE', 'MSE', 'MAE')
 ```
