@@ -68,142 +68,209 @@ Before applying SVD to the user-item matrix, we will need to (1) load the data i
 ## Load Data
 First, we'll load in the MovieLense data. We'll subset the data to individuals that have ranked at least 50 movies and movies that have at least 100 ratings. The resulting dataset is a user-item matrix that has 560 users and 332 movies. There are 55,298 ratings, so a number of ratings in the matrix are left blank.
 ```{r, message = FALSE}
-
 data("MovieLense")
-
 most_rated <- MovieLense[rowCounts(MovieLense) > 50, colCounts(MovieLense) > 100]
 most_rated
-
 ```
 
 ## Data Transformation
 Next, we will impute the missing values by using the median rating of each movie. Our primary reason for choosing to use the median is keep the ratings on a discrete scale. We will use the methodology for replacing nulls with the column medians from this [stackoverflow](https://stats.stackexchange.com/questions/28576/filling-nas-in-a-dataset-with-column-medians-in-r) post. 
 
 ```{r}
-
 most_rated.data <- most_rated@data
-
 # replace 0 (no rating) with NULL
 most_rated.data[most_rated.data== 0] <- NA
-
 # function to replace the missing value with the median of the column
 medValue.f <- function(x){
    x[is.na(x)] = median(x, na.rm=TRUE) 
    return(x)
 }
-
 most_rated.data <- apply(most_rated.data, 2, medValue.f)
 most_rated@data <- as(most_rated.data, 'dgCMatrix')
-
 most_rated
-
 ```
 We can see that our matrix now contains 185,920 ratings, which means that our imputation successfully replaced all missing values.  
 
+# Singular Value Decomposition - SVD 
+We can now perform SVD on our matrix and examine the effect of varying the number of latent factors $(k)$. We want to reduce the matrix to the factors that account for $90\%$ of the variability in the data. In essence, the final reduced matrix will represent our "predictions" for the ratings. We can examine how good these predictions are by comparing them to the actual user-item matrix.  
 
-# Singular Value Decomposition (SVD) - RMSE against Actual Set
-
-We can now perform SVD on our matrix and examine the effect of varying the number of latent factors $(k)$. We can visualize the RMSE between the actual user-rating matrix and the decomposed matrix. 
-  
-We will define 2 functions - one to calculate the RMSE between the predicted matrix (from SVD) and the actual matrix and one to perform SVD on the original matrix.
-
+First, we'll normalize the data and perform SVD on our matrix. We will also create a table of the variances for each value of $k$. 
 ```{r}
-####################### functions
+# Normalize (center) the ratings matrix
+trim <- normalize(most_rated, method = "center")
+# Perform SVD on normalized matrix
+SVD <- svd(trim@data)
+# Table of variances for each dimension
+variance.table <- prop.table(SVD$d^2)
 
-# RMSE function for the SVD
-RMSE <- function(pred,act){
-  list(RMSE.SVD = sqrt(mean((pred - act)^2)))
-}
-
-# error calculation for SVD
-calcError <- function(dim){
-  
-  # SVD with specified number of factors
-  tempRated <- most_rated
-  SVD <- svd(tempRated@data, nu = dim, nv = dim)
-  
-  finalMatrix <- SVD$u %*% diag(SVD$d[1:dim]) %*% t(SVD$v)
-  tempRated@data <- as(finalMatrix, 'dgCMatrix')
-  
-  # calculate RMSE for k-reduction
-  errors.ls <- RMSE(tempRated@data, most_rated@data)
-  
-  # return list of k and RMSE for SVD
-  return(errors.ls)
-}
 ```
 
-Now that the functions are defined, we can cycle through varying sizes of $k$ and calculate the RMSE. We can see from the plot that as the $k$ increases, the RMSE decreases. 
+## Visualize RMSE & Variability
 
+Next, we'll define a function to calculate the RMSE between the reduced matrix and the actual ratings. For each value of $k$, we can visualize the RMSE. 
 ```{r}
-# start at 2 dimensions so that the diagnonal rxr matrix can be built
-nDim <- 2:min(nrow(most_rated@data), ncol(most_rated@data))
-RMSE.ls <- lapply(nDim, calcError)
+# RMSE function
+RMSE <- function(matrix, predictions) sqrt(sum((matrix - predictions)^2, na.rm = TRUE)/sum(!is.na(matrix)))
 
-plot(unlist(RMSE.ls),
+rmse.ls <- c()
+
+for (i in 1:length(variance.table)) {
+  # calculate RMSE
+  if (i == 1){
+    finalMatrix <- SVD$u[,1:i] %*% t(SVD$v[,1:i]) * SVD$d
+    rmse.ls <- rbind(rmse.ls,RMSE(as(finalMatrix, 'dgCMatrix'), trim@data))
+  } else {
+    finalMatrix <- SVD$u[,1:i] %*% diag(SVD$d[1:i]) %*% t(SVD$v[,1:i])
+    rmse.ls <- rbind(rmse.ls,RMSE(as(finalMatrix, 'dgCMatrix'), trim@data))
+  }
+}
+
+
+# Plot of RMSE relative to number of dimensions k
+plot(unlist(rmse.ls),
      main = 'RMSE vs k',
      xlab = 'k',
      ylab = 'RMSE')
 
 ```
+  
+As expected, as the number of latent factors increases, the RMSE decreases.  
+ 
+We can also visualize the cumulative variance for increasing dimensionality of the latent factors. 
 
-
-
-# Singular Value Decomposition (SVD) - RMSE in predictions
-
-Next, we will built a recommender system for varying values of $k$ and analyze the error between the predictions and the actual ratings. Note that in the SVD Recommender methnod from the *recommenderlab* library, $k$ represents the percentage of the max size of the latent factor matrix. 
 ```{r}
-# recommender error with varying pcts for k-reduction
-recError <- function(k_pct) {
-  
-  # create recommender system
-  tic("SVD_Model - Train")
-  modelSVD <- Recommender(train, 
-                          method = "SVD", 
-                          parameter = list(k = k_pct))
-  toc(log = TRUE, quiet = TRUE)
-  
-  # predict on known data
-  tic("SVD_Model - Predict")
-  predSVD <- predict(modelSVD, newdata = known, type = "ratings")
-  toc(log = TRUE, quiet = TRUE)
-  
-  # calculate accuracy
-  acc <- calcPredictionAccuracy(predSVD, unknown)
-  
-  # create list of percentage used for recommender system & accuracy
-  return(acc)
+plot(cumsum(variance.table),
+     main = 'Cumulative variance',
+     xlab = 'k',
+     ylab = 'Cumulative Variance')
+
+```
+
+We can see that the number of latent factors accounting for $90\%$ of the variability lies between 100 and 150. We can verify that the actual value of $k$ is 137. 
+
+``` {r}
+# Determining number of dimensions that explain ~90% of total variance
+n_dims <- 0
+total_variance <- 0
+
+for (i in 1:length(variance.table)) {
+  # calculate variance 
+  total_variance <- total_variance + variance.table[i]
+  ifelse(total_variance <= 0.90, n_dims <- n_dims + 1, break)
 }
 
+n_dims
 ```
 
-Finally, we can cycle through various
+
+## Dimensionality Reduction - 90% Variability
+Finally, we can create our final prediction matrix using $k=137$.
 ```{r}
-
-pctDim <- 2:100
-recError.ls <- lapply(pctDim,recError)
-recError.df <- data.frame(do.call('rbind',recError.ls))
-recError.df$ERROR_MEAN<- rowMeans(recError.df)
-
-
-ggplot(recError.df, aes(1:nrow(recError.df))) +                   
-  geom_line(aes(y=RMSE), colour="red") +  
-  geom_line(aes(y=MSE), colour="green") + 
-  geom_line(aes(y=MAE), colour="blue") +
-  geom_line(aes(y=ERROR_MEAN), colour="purple") +
-  xlab('k-pct') +
-  ylab('Error') +
-  ggtitle('Errors across all runs') 
-
-plot(recError.df$RMSE,
-     main = 'Error for k-% reduction',
-     xlab = 'k-pct',
-     ylab = '')
+# Calculating trimmed prediction matrix
+trimMatrix <- SVD$u[,1:n_dims] %*% diag(SVD$d[1:n_dims]) %*% t(SVD$v[,1:n_dims])
+trim@data <- as(trimMatrix, 'dgCMatrix')
+trim@data@Dimnames <- most_rated@data@Dimnames
 
 ```
 
+# Build Recommender Systems
+Now that we've performed SVD and identified the number of latent factors that account for $90\%$ of the variance in the data, we can start to build the recommender systems.
 
-#Alternative
+## UBCF recommender built on reduced data
+First, we will build a recommender system using the reduced data. We'll apply the UBCF methodology using cosine similarity and 100 neighbors. 
+
+```{r}
+set.seed(200)
+e_trim <- evaluationScheme(denormalize(trim), method="split", train=0.8, given=15, goodRating = 3)
+  
+# Build recommender on train data
+tic("Reduced Data - Train")
+rec_trim <- Recommender(getData(e_trim, "train"), 'UBCF', parameter = list(method = 'cosine', nn = 100, normalize = 'center'))
+toc(log = TRUE, quiet = TRUE)
+
+# Create predictions for the test data using known ratings 
+tic("Reduced Data - Predict")
+pred_trim <- predict(rec_trim, getData(e_trim, "known"), type="ratings")
+toc(log = TRUE, quiet = TRUE)
+
+# Avg error metrics per user, avgd over all recommendations
+error_trim <- calcPredictionAccuracy(pred_trim, getData(e_trim, "unknown"))
+error_trim
+
+```
+
+## UBCF recommender built on original data
+Next, we'll create a UBCF recommender on the original, unaltered data. 
+```{r}
+set.seed(200)
+# Split non-trimmed data
+e <- evaluationScheme(most_rated, method = "split", train = 0.8, given = 15, goodRating = 3)
+
+# Build recommender
+tic("Original Data - Train")
+recc_ubcf <- Recommender(getData(e, "train"), "ubcf", parameter = list(method = 'cosine', nn = 100, normalize = 'center'))
+toc(log = TRUE, quiet = TRUE)
+
+# create predictions for the test data using known ratings 
+tic("Original Data - Predict")
+pred_ubcf <- predict(recc_ubcf, getData(e, "known"), type="ratings")
+toc(log = TRUE, quiet = TRUE)
+
+# Avg error metrics per user, avgd over all recommendations
+error_ubcf <- calcPredictionAccuracy(pred_ubcf, getData(e, "unknown"))
+error_ubcf
+```
+
+# Evaluation
+We'll evaluate our models based on (1) prediction error and (2) total run time. 
+
+## Prediction Error
+We can examine the differences in RMSE, MSE, and MAE between the reduced matrix and the unaltered matrix.
+
+```{r}
+allErrors <- rbind(error_ubcf, error_trim)
+allErrors
+barplot(allErrors, 
+        main="Prediction Error Comparison",
+        xlab="Error Type", 
+        col=c("darkgreen","darkblue"),
+        legend = rownames(allErrors), 
+        beside=TRUE)
+
+```
+
+The recommender system using the reduced data has a lower RMSE, MSE, and MAE than the unaltered data.
+
+## Run Time
+We can also visualize the run time for each recommender system. 
+```{r}
+log <- as.data.frame(unlist(tic.log(format = TRUE)))
+colnames(log) <- c("Run Time")
+knitr::kable(log, format = "html") %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover"))
+```
+The original data took less time to train on. The predictions took about the same amount of time. 
+
+# Discussion
+From this analysis, we have shown:
+
+* Singular Value Decomposition reduces the dimensionality of the latent factors and can yield more accurate predictions.
+* 
+
+# Reference
+https://stats.stackexchange.com/questions/28576/filling-nas-in-a-dataset-with-column-medians-in-r
+
+R Data Analysis Projects. (2010). Google Books. https://books.google.gy/books?id=pkFPDwAAQBAJ&pg=PA141&lpg=PA141&dq=evaluationScheme&source=bl&ots=66LnidAaND&sig=ACfU3U3csRZ4e1YGZhdwpSwajgTQjSe3rg&hl=en&sa=X&ved=2ahUKEwjWxdTZmovqAhXohHIEHZR7D40Q6AEwCXoECAoQAQ#v=onepage&q=evaluationScheme&f=false
+
+jumpingrivers. (2017, November 19). Timing in R - Jumping Rivers. Jumping Rivers. https://www.jumpingrivers.com/blog/timing-in-r/
+
+Hahsler, M. (2019, August 27). Calculate the Prediction Error for a Recommendation. Rdrr.Io. https://rdrr.io/cran/recommenderlab/man/calcPredictionAccuracy.html
+
+
+
+
+
+# Alternative
 
 The evaluationscheme class provided in recommenderlab enables the creation of a train test strategy which allows for an analysis of the performance of a recommendation engine.(R Data Analysis Projects, 2010)
 ```{r}
@@ -223,22 +290,14 @@ An engine will be built using SVD and another using UBCF. The  performance of th
 
 ###UBCF Model
 ```{r}
-
-# training the model with UBCF methodology
 tic("UBCF_Model - Train")
 modelUBCF <- Recommender(train, method = "UBCF")
 toc(log = TRUE, quiet = TRUE)
-
-# predicting on known data
 tic("UBCF_Model - Predict")
 predUBCF <- predict(modelUBCF, newdata = known, type = "ratings")
 toc(log = TRUE, quiet = TRUE)
-
-# calculating accuracy by user
-UBCF_acc <- calcPredictionAccuracy(predUBCF, unknown, byUser = TRUE)
-
+ (UBCF_acc <- calcPredictionAccuracy(predUBCF, unknown, byUser = TRUE) )
 kable(head(UBCF_acc)) %>% kable_styling(bootstrap_options = "striped", font_size = 12, full_width = F)
-
 ```
 
 
@@ -247,44 +306,14 @@ kable(head(UBCF_acc)) %>% kable_styling(bootstrap_options = "striped", font_size
 #tic("SVD_Model - Train")
 modelSVD <- Recommender(train, method = "SVD", parameter = list(k = 20))
 toc(log = TRUE, quiet = TRUE)
-
 #tic("SVD_Model - Predict")
 predSVD <- predict(modelSVD, newdata = known, type = "ratings")
 toc(log = TRUE, quiet = TRUE)
-
-SVDacc <- calcPredictionAccuracy(predSVD, unknown, byUser = TRUE) 
-
+ SVDacc <- calcPredictionAccuracy(predSVD, unknown, byUser = TRUE) 
+ 
 kable(head(SVDacc)) %>% kable_styling(bootstrap_options = "striped", font_size = 12, full_width = F)
 ```
 In this sample,in terms of accuracy,  UCBF seems to perform better than SVD. UCBF produced significantly better RSME vallues than SVD. Further investigation is needed. 
-
-
-# Compare Run time
-
-```{r}
-
-log <- as.data.frame(unlist(tic.log(format = TRUE)))
-colnames(log) <- c("Run Time")
-knitr::kable(log, format = "html") %>%
-  kableExtra::kable_styling(bootstrap_options = c("striped", "hover"))
-```
-
-
-# Evaluation
-
-# Discussion
-
-# Conclusion
-
-# Reference
-https://stats.stackexchange.com/questions/28576/filling-nas-in-a-dataset-with-column-medians-in-r
-
-R Data Analysis Projects. (2010). Google Books. https://books.google.gy/books?id=pkFPDwAAQBAJ&pg=PA141&lpg=PA141&dq=evaluationScheme&source=bl&ots=66LnidAaND&sig=ACfU3U3csRZ4e1YGZhdwpSwajgTQjSe3rg&hl=en&sa=X&ved=2ahUKEwjWxdTZmovqAhXohHIEHZR7D40Q6AEwCXoECAoQAQ#v=onepage&q=evaluationScheme&f=false
-
-jumpingrivers. (2017, November 19). Timing in R - Jumping Rivers. Jumping Rivers. https://www.jumpingrivers.com/blog/timing-in-r/
-
-Hahsler, M. (2019, August 27). Calculate the Prediction Error for a Recommendation. Rdrr.Io. https://rdrr.io/cran/recommenderlab/man/calcPredictionAccuracy.html
-
 
 
 

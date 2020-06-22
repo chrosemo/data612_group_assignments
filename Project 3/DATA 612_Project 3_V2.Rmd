@@ -151,7 +151,7 @@ plot(unlist(RMSE.ls),
 
 # Singular Value Decomposition (SVD) - RMSE in predictions
 
-Next, we will built a recommender system for varying values of $k$ and analyze the error between the predictions and the actual ratings. Note that in the SVD Recommender methnod from the *recommenderlab* library, $k$ represents the percentage of the max size of the latent factor matrix. 
+Next, we will built a recommender system for varying values of $k$ and analyze the error between the predictions and the actual ratings. Note that in the SVD Recommender method from the *recommenderlab* library, $k$ represents the percentage of the max size of the latent factor matrix. 
 ```{r}
 # recommender error with varying pcts for k-reduction
 recError <- function(k_pct) {
