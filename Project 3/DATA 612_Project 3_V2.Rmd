@@ -1,0 +1,290 @@
+---
+title: 'DATA 612: Project 3 | MATRIX FACTORIZATION METHODS'
+author: "Amber Ferger, Charlie Rosemond, Juanelle Marks" 
+date: "6/14/2020"
+output: 
+    html_document:
+     theme: lumen
+     highlight: tango
+     toc: TRUE
+    
+---
+
+# Project Instructions
+The goal of this assignment is give you practice working with Matrix Factorization techniques.
+
+Your task is implement a matrix factorization method—such as singular value decomposition (SVD) or Alternating Least Squares (ALS)—in the context of a recommender system.  
+  
+You may approach this assignment in a number of ways. You are welcome to start with an existing recommender system written by yourself or someone else. Remember as always, to cite your sources, so that you can be graded on what you added, not what you found.
+
+SVD can be thought of as a pre-processing step for feature engineering. You might easily start with thousands or millions of items, and use SVD to create a much smaller set of “k” items (e.g. 20 or 70).
+
+#### Notes/Limitations:
+
+* SVD builds features that may or may not map neatly to items (such as movie genres or news topics). As in many areas of machine learning, the lack of explainability can be an issue).
+
+* SVD requires that there are no missing values. There are various ways to handle this, including (1) imputation of missing values, (2) mean-centering values around 0, or (3) <advanced> using a more advanced technique, such as stochastic gradient descent to simulate SVD in populating the factored matrices.
+
+* Calculating the SVD matrices can be computationally expensive, although calculating ratings once the factorization is completed is very fast. You may need to create a subset of your data for SVD calculations to be successfully performed, especially on a machine with a small RAM footprint.
+
+# Introduction and Motivation
+We will use *Singular Value Decomposition* to factor the user-item matrix and reduce the dimensionality of the latent factors. Based on the results from our last project, we will use the in-built user-based collaborative filtering system from the **recommenderlab** package to train and evaluate the data across varying reductions of size $k$.
+
+
+## Technique
+In *Singular Value Decomposition (SVD)* the user-item matrix is factored into three new matrices:
+$$A = U \Sigma V^T$$
+
+where:  
+$U$ is an $m \times r$ user-to-concept similarity matrix that measures each user's affinity to the latent factors (charactersitic)  
+$\Sigma$ is an $r \times r$ concept matrix that describes strength of each latent factor (charactersitic)  
+$V$ is an $r \times n$ item-to-concept similarty matrix that measures each item's similarity to the latent factors (charactersitic)  
+  
+The goal will be to reduce $r$ - the number of latent factors used for developing the ratings to varying sizes of $k$. For each value of $k$, we will calculate and compare the RMSE in rating predictions. Ultimately, this reduction of the feature space will reduce the "noisy" components that do not contribute much to the final prediction.
+
+
+## Data Source
+We will use the *MovieLense* dataset from the **recommenderlab** library. Each row represents a user and each column represents a movie. Since this dataset is very sparse (most users have seen a few of the movies), we will subset the data to include only those users who have rated at least 50 movies and only those movies that are rated by at least 100 users.  
+  
+Since successful implementation of SVD requires no missing values, we will impute all nulls in the dataset with the median rating for that movie. 
+
+
+```{r message=FALSE, include=FALSE}
+# load libraries
+library(tidyverse)
+library(pander)
+library(knitr)
+library(dplyr)
+library(Rfast)
+library(recommenderlab)
+library(kableExtra)
+library(tictoc)
+```
+
+# Data Cleansing 
+Before applying SVD to the user-item matrix, we will need to (1) load the data in (2) subset it to relevant records and (3) impute missing values.
+
+
+## Load Data
+First, we'll load in the MovieLense data. We'll subset the data to individuals that have ranked at least 50 movies and movies that have at least 100 ratings. The resulting dataset is a user-item matrix that has 560 users and 332 movies. There are 55,298 ratings, so a number of ratings in the matrix are left blank.
+```{r, message = FALSE}
+
+data("MovieLense")
+
+most_rated <- MovieLense[rowCounts(MovieLense) > 50, colCounts(MovieLense) > 100]
+most_rated
+
+```
+
+## Data Transformation
+Next, we will impute the missing values by using the median rating of each movie. Our primary reason for choosing to use the median is keep the ratings on a discrete scale. We will use the methodology for replacing nulls with the column medians from this [stackoverflow](https://stats.stackexchange.com/questions/28576/filling-nas-in-a-dataset-with-column-medians-in-r) post. 
+
+```{r}
+
+most_rated.data <- most_rated@data
+
+# replace 0 (no rating) with NULL
+most_rated.data[most_rated.data== 0] <- NA
+
+# function to replace the missing value with the median of the column
+medValue.f <- function(x){
+   x[is.na(x)] = median(x, na.rm=TRUE) 
+   return(x)
+}
+
+most_rated.data <- apply(most_rated.data, 2, medValue.f)
+most_rated@data <- as(most_rated.data, 'dgCMatrix')
+
+most_rated
+
+```
+We can see that our matrix now contains 185,920 ratings, which means that our imputation successfully replaced all missing values.  
+
+
+# Singular Value Decomposition (SVD) - RMSE against Actual Set
+
+We can now perform SVD on our matrix and examine the effect of varying the number of latent factors $(k)$. We can visualize the RMSE between the actual user-rating matrix and the decomposed matrix. 
+  
+We will define 2 functions - one to calculate the RMSE between the predicted matrix (from SVD) and the actual matrix and one to perform SVD on the original matrix.
+
+```{r}
+####################### functions
+
+# RMSE function for the SVD
+RMSE <- function(pred,act){
+  list(RMSE.SVD = sqrt(mean((pred - act)^2)))
+}
+
+# error calculation for SVD
+calcError <- function(dim){
+  
+  # SVD with specified number of factors
+  tempRated <- most_rated
+  SVD <- svd(tempRated@data, nu = dim, nv = dim)
+  
+  finalMatrix <- SVD$u %*% diag(SVD$d[1:dim]) %*% t(SVD$v)
+  tempRated@data <- as(finalMatrix, 'dgCMatrix')
+  
+  # calculate RMSE for k-reduction
+  errors.ls <- RMSE(tempRated@data, most_rated@data)
+  
+  # return list of k and RMSE for SVD
+  return(errors.ls)
+}
+```
+
+Now that the functions are defined, we can cycle through varying sizes of $k$ and calculate the RMSE. We can see from the plot that as the $k$ increases, the RMSE decreases. 
+
+```{r}
+# start at 2 dimensions so that the diagnonal rxr matrix can be built
+nDim <- 2:min(nrow(most_rated@data), ncol(most_rated@data))
+RMSE.ls <- lapply(nDim, calcError)
+
+plot(unlist(RMSE.ls),
+     main = 'RMSE vs k',
+     xlab = 'k',
+     ylab = 'RMSE')
+
+```
+
+
+
+# Singular Value Decomposition (SVD) - RMSE in predictions
+
+Next, we will built a recommender system for varying values of $k$ and analyze the error between the predictions and the actual ratings. Note that in the SVD Recommender methnod from the *recommenderlab* library, $k$ represents the percentage of the max size of the latent factor matrix. 
+```{r}
+# recommender error with varying pcts for k-reduction
+recError <- function(k_pct) {
+  
+  # create recommender system
+  tic("SVD_Model - Train")
+  modelSVD <- Recommender(train, 
+                          method = "SVD", 
+                          parameter = list(k = k_pct))
+  toc(log = TRUE, quiet = TRUE)
+  
+  # predict on known data
+  tic("SVD_Model - Predict")
+  predSVD <- predict(modelSVD, newdata = known, type = "ratings")
+  toc(log = TRUE, quiet = TRUE)
+  
+  # calculate accuracy
+  acc <- calcPredictionAccuracy(predSVD, unknown)
+  
+  # create list of percentage used for recommender system & accuracy
+  return(acc)
+}
+
+```
+
+Finally, we can cycle through various
+```{r}
+
+pctDim <- 2:100
+recError.ls <- lapply(pctDim,recError)
+recError.df <- data.frame(do.call('rbind',recError.ls))
+recError.df$ERROR_MEAN<- rowMeans(recError.df)
+
+
+ggplot(recError.df, aes(1:nrow(recError.df))) +                   
+  geom_line(aes(y=RMSE), colour="red") +  
+  geom_line(aes(y=MSE), colour="green") + 
+  geom_line(aes(y=MAE), colour="blue") +
+  geom_line(aes(y=ERROR_MEAN), colour="purple") +
+  xlab('k-pct') +
+  ylab('Error') +
+  ggtitle('Errors across all runs') 
+
+plot(recError.df$RMSE,
+     main = 'Error for k-% reduction',
+     xlab = 'k-pct',
+     ylab = '')
+
+```
+
+
+#Alternative
+
+The evaluationscheme class provided in recommenderlab enables the creation of a train test strategy which allows for an analysis of the performance of a recommendation engine.(R Data Analysis Projects, 2010)
+```{r}
+set.seed(200)
+eval <- evaluationScheme(most_rated, method = "split",
+                         train = 0.8, given= 20, goodRating=3)
+#eval
+#Extract train and test data
+train <- getData(eval, "train")
+known <- getData(eval, "known")
+unknown <- getData(eval, "unknown")
+```
+
+
+# Build Recommender system (SVD VS UBCF)
+An engine will be built using SVD and another using UBCF. The  performance of the two will be compared according to learning and predicting speed  and prediction accuracy.The tictoc library will be used to track build time ((jumpingrivers, 2017)) and  accuracy will be compared across RSME values. 
+
+###UBCF Model
+```{r}
+
+# training the model with UBCF methodology
+tic("UBCF_Model - Train")
+modelUBCF <- Recommender(train, method = "UBCF")
+toc(log = TRUE, quiet = TRUE)
+
+# predicting on known data
+tic("UBCF_Model - Predict")
+predUBCF <- predict(modelUBCF, newdata = known, type = "ratings")
+toc(log = TRUE, quiet = TRUE)
+
+# calculating accuracy by user
+UBCF_acc <- calcPredictionAccuracy(predUBCF, unknown, byUser = TRUE)
+
+kable(head(UBCF_acc)) %>% kable_styling(bootstrap_options = "striped", font_size = 12, full_width = F)
+
+```
+
+
+
+```{r}
+#tic("SVD_Model - Train")
+modelSVD <- Recommender(train, method = "SVD", parameter = list(k = 20))
+toc(log = TRUE, quiet = TRUE)
+
+#tic("SVD_Model - Predict")
+predSVD <- predict(modelSVD, newdata = known, type = "ratings")
+toc(log = TRUE, quiet = TRUE)
+
+SVDacc <- calcPredictionAccuracy(predSVD, unknown, byUser = TRUE) 
+
+kable(head(SVDacc)) %>% kable_styling(bootstrap_options = "striped", font_size = 12, full_width = F)
+```
+In this sample,in terms of accuracy,  UCBF seems to perform better than SVD. UCBF produced significantly better RSME vallues than SVD. Further investigation is needed. 
+
+
+# Compare Run time
+
+```{r}
+
+log <- as.data.frame(unlist(tic.log(format = TRUE)))
+colnames(log) <- c("Run Time")
+knitr::kable(log, format = "html") %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+
+# Evaluation
+
+# Discussion
+
+# Conclusion
+
+# Reference
+https://stats.stackexchange.com/questions/28576/filling-nas-in-a-dataset-with-column-medians-in-r
+
+R Data Analysis Projects. (2010). Google Books. https://books.google.gy/books?id=pkFPDwAAQBAJ&pg=PA141&lpg=PA141&dq=evaluationScheme&source=bl&ots=66LnidAaND&sig=ACfU3U3csRZ4e1YGZhdwpSwajgTQjSe3rg&hl=en&sa=X&ved=2ahUKEwjWxdTZmovqAhXohHIEHZR7D40Q6AEwCXoECAoQAQ#v=onepage&q=evaluationScheme&f=false
+
+jumpingrivers. (2017, November 19). Timing in R - Jumping Rivers. Jumping Rivers. https://www.jumpingrivers.com/blog/timing-in-r/
+
+Hahsler, M. (2019, August 27). Calculate the Prediction Error for a Recommendation. Rdrr.Io. https://rdrr.io/cran/recommenderlab/man/calcPredictionAccuracy.html
+
+
+
+
