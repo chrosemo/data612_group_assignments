@@ -131,7 +131,6 @@ calcError <- function(dim){
   # return list of k and RMSE for SVD
   return(errors.ls)
 }
-
 ```
 
 Now that the functions are defined, we can cycle through varying sizes of $k$ and calculate the RMSE. We can see from the plot that as the $k$ increases, the RMSE decreases. 
@@ -151,6 +150,8 @@ plot(unlist(RMSE.ls),
 
 
 # Singular Value Decomposition (SVD) - RMSE in predictions
+
+Next, we will built a recommender system for varying values of $k$ and analyze the error between the predictions and the actual ratings. Note that in the SVD Recommender methnod from the *recommenderlab* library, $k$ represents the percentage of the max size of the latent factor matrix. 
 ```{r}
 # recommender error with varying pcts for k-reduction
 recError <- function(k_pct) {
@@ -171,16 +172,15 @@ recError <- function(k_pct) {
   acc <- calcPredictionAccuracy(predSVD, unknown)
   
   # create list of percentage used for recommender system & accuracy
-  #acc.ls <- c(k_pct = k_pct, acc)
   return(acc)
 }
 
 ```
 
-# calculate 
+Finally, we can cycle through various
 ```{r}
-pctDim <- 2:100
 
+pctDim <- 2:100
 recError.ls <- lapply(pctDim,recError)
 recError.df <- data.frame(do.call('rbind',recError.ls))
 recError.df$ERROR_MEAN<- rowMeans(recError.df)
@@ -194,12 +194,6 @@ ggplot(recError.df, aes(1:nrow(recError.df))) +
   xlab('k-pct') +
   ylab('Error') +
   ggtitle('Errors across all runs') 
-
-
-plot(unlist(RMSE.ls),
-     main = 'RMSE vs k',
-     xlab = 'k',
-     ylab = 'RMSE')
 
 plot(recError.df$RMSE,
      main = 'Error for k-% reduction',
