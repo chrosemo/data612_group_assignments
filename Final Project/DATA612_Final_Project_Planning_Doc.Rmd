@@ -1,0 +1,25 @@
+---
+title: 'DATA 612: Final Project Planning Document'
+author: "Amber Ferger, Charlie Rosemond, Juanelle Marks"
+date: "6/23/2020"
+output: 
+    html_document:
+     theme: lumen
+     highlight: tango
+     toc: TRUE
+---
+
+## Assignment
+Find an interesting dataset and describe the system you plan to build out. If you would like to use one of the datasets you have already worked with, you should add a unique element or incorporate additional data. (i.e. explicit features you scrape from another source, like image analysis on movie posters). The overall goal, however, will be to produce quality recommendations by extracting insights from a large dataset. You may do so using Spark, or another distributed computing method, OR by effectively applying one of the more advanced mathematical techniques we have covered. There is no preference for one over the other, as long as your recommender works! 
+
+## Netflix Prize Dataset - Background
+We will be using the [Netflix Prize Dataset](http://academictorrents.com/details/9b13183dc4d60676b773c9e2cd6de5e5542cee9a) for our final project. Back in 2006, Netflix offered a prize of $\$1,000,000$ to anyone that could beat their movie recommendation system by an RMSE of $10\%$. In September 2009, Netflix awarded the grand prize to BellKor's Pragmatic Chaos team with a recommender system that beat Netflix by $10.06\%$.
+
+## The Data
+The dataset is a multivariate time-series and is composed of about $480,000$ users, $17,000$ movies and $100$ million ratings. Data was collected between October 1998 and December 2005. Each movie and user is represented by a unique integer id and ratings are on a scale of 1-5. Kaggle has released the data on [their website](https://www.kaggle.com/netflix-inc/netflix-prize-data) and we will use this as our base dataset.  
+
+## The Recommender System 
+We were intrigued by the article 
+
+
+
