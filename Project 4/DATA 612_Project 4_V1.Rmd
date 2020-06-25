@@ -31,9 +31,37 @@ In this assignment you’re asked to do at least one or (if you like) both of th
 
 # Project Implementation
 
+
+
+```{r setup}
+library(data.table)
+library(tidyverse)
+```
+
 ## Data Source
 
-?
+
+```{r}
+
+# unzip file in local, temp dir
+out <- unzip('combined_data_1.zip', exdir = tempdir())
+
+# first 5,000,000 rows
+ratings.raw <- data.frame(fread(file = out, fill = TRUE, nrow = 5000000, header = FALSE))
+
+# detect rows with the user id
+ratings.df <- ratings.raw %>%
+    mutate(USER_ROW = str_detect(V1, ':'),
+           FINAL_COL = ifelse(USER_ROW == TRUE, paste0(V1,',,'),V1))
+
+# split data into columns
+ratings.final <- ratings.df %>% 
+    separate(FINAL_COL, c("MOVIE", "RATING", "YEAR")) %>%
+    select(USER_ROW, MOVIE, RATING,YEAR)
+
+# write.csv(ratings.final, file = 'finalRatings.txt')
+
+```
 
 ## Motivation
 
