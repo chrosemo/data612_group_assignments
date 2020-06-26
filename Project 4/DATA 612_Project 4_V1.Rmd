@@ -33,35 +33,10 @@ In this assignment you’re asked to do at least one or (if you like) both of th
 
 
 
-```{r setup}
-library(data.table)
-library(tidyverse)
-```
 
 ## Data Source
 
 
-```{r}
-
-# unzip file in local, temp dir
-out <- unzip('combined_data_1.zip', exdir = tempdir())
-
-# first 5,000,000 rows
-ratings.raw <- data.frame(fread(file = out, fill = TRUE, nrow = 5000000, header = FALSE))
-
-# detect rows with the user id
-ratings.df <- ratings.raw %>%
-    mutate(USER_ROW = str_detect(V1, ':'),
-           FINAL_COL = ifelse(USER_ROW == TRUE, paste0(V1,',,'),V1))
-
-# split data into columns
-ratings.final <- ratings.df %>% 
-    separate(FINAL_COL, c("MOVIE", "RATING", "YEAR")) %>%
-    select(USER_ROW, MOVIE, RATING,YEAR)
-
-# write.csv(ratings.final, file = 'finalRatings.txt')
-
-```
 
 ## Motivation
 
@@ -75,8 +50,55 @@ library(tidyverse)
 library(pander)
 library(knitr)
 library(dplyr)
-#library(recommenderlab)
+library(recommenderlab)
+library(readxl)
+```
 
+## Load data
+
+
+```{r}
+# Saving for later
+# unzip file in local, temp dir
+#out <- unzip('combined_data_1.zip', exdir = tempdir())
+
+# first 5,000,000 rows
+#ratings.raw <- data.frame(fread(file = out, fill = TRUE, nrow = 5000000, header = FALSE))
+
+# detect rows with the user id
+#ratings.df <- ratings.raw %>%
+#    mutate(USER_ROW = str_detect(V1, ':'),
+#           FINAL_COL = ifelse(USER_ROW == TRUE, paste0(V1,',,'),V1))
+
+# split data into columns
+#ratings.final <- ratings.df %>% 
+#    separate(FINAL_COL, c("MOVIE", "RATING", "YEAR")) %>%
+#    select(USER_ROW, MOVIE, RATING,YEAR)
+
+# write.csv(ratings.final, file = 'finalRatings.txt')
+
+```
+```{r}
+# Read jester data
+jester <- read_xls("C:\\Users\\Charlie\\Documents\\CUNY MSDS\\summer20\\612\\Week4\\jester-data-1.xls", col_names = FALSE)
+colnames(jester) <- c("ratingCount", seq(100))
+row.names(jester) <- 1:nrow(jester)
+ratings <- jester[-1]
+
+# replace 0 (no rating) with NULL
+ratings[ratings == 99] <- NA
+# function to replace the missing value with the median of the column
+medValue.f <- function(x){
+  x[is.na(x)] <- median(x, na.rm=TRUE) 
+  return(x)
+}
+
+# Replace NA with median
+ratings <- apply(ratings, 2, medValue.f)
+
+# Create large dgCMatrix
+ratings <- as(ratings, 'dgCMatrix')
+ratings@Dimnames[1] <- list(as.character(1:nrow(ratings)))
 ```
 
 ## Comparison of accuracy of two  Recommender Systems
