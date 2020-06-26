@@ -35,12 +35,17 @@ In this assignment you’re asked to do at least one or (if you like) both of th
 
 
 ## Data Source
-
+We will be using the (jester)[http://eigentaste.berkeley.edu/dataset/] dataset for this assignment. This dataset contains data from 24,983 users who have rated 36 or more jokes. Ratings are real values ranging from $-10.00$ to $+10.00$ (the value "99" corresponds to "null" = "not rated"). Each row in the dataset represents a different user, and the first column represents the total number of jokes the individual has rated. The remaining 100 columns give the ratings for each joke. 
 
 
 ## Motivation
 
-?
+In this assignment, we will compare the output of 2 recommender systems:
+
+* **UBCF** - user-based collaborative filtering
+* **IBCF** - item-based collaborative filtering
+
+For each recommender system, we will use k-fold cross-validation 
 
 ## Load Libraries
 
@@ -56,52 +61,52 @@ library(readxl)
 
 ## Load data
 
+First, we will load in the jester data set. We will remove the column with the number of rated jokes because this will not be used in the recommendation system. Additionally, the raw data stores non-rated jokes as the number $99$, so instead, we will replace these values with nulls. 
 
-```{r}
-# Saving for later
-# unzip file in local, temp dir
-#out <- unzip('combined_data_1.zip', exdir = tempdir())
-
-# first 5,000,000 rows
-#ratings.raw <- data.frame(fread(file = out, fill = TRUE, nrow = 5000000, header = FALSE))
-
-# detect rows with the user id
-#ratings.df <- ratings.raw %>%
-#    mutate(USER_ROW = str_detect(V1, ':'),
-#           FINAL_COL = ifelse(USER_ROW == TRUE, paste0(V1,',,'),V1))
-
-# split data into columns
-#ratings.final <- ratings.df %>% 
-#    separate(FINAL_COL, c("MOVIE", "RATING", "YEAR")) %>%
-#    select(USER_ROW, MOVIE, RATING,YEAR)
-
-# write.csv(ratings.final, file = 'finalRatings.txt')
-
-```
 ```{r}
 # Read jester data
-jester <- read_xls("Project 4/jester-data-1.xls", col_names = FALSE)
+jester <- read_xls("jester-data-1.xls", col_names = FALSE)
 colnames(jester) <- c("ratingCount", seq(100))
 row.names(jester) <- 1:nrow(jester)
+
+# remove num jokes column
 ratings <- jester[-1]
 
 # replace 0 (no rating) with NULL
 ratings[ratings == 99] <- NA
-# function to replace the missing value with the median of the column
-medValue.f <- function(x){
-  x[is.na(x)] <- median(x, na.rm=TRUE) 
-  return(x)
-}
+ratings <- as.matrix(ratings)
 
-# Replace NA with median
-ratings <- apply(ratings, 2, medValue.f)
+# # function to replace the missing value with the median of the column
+# medValue.f <- function(x){
+#   x[is.na(x)] <- median(x, na.rm=TRUE) 
+#   return(x)
+# }
+# # Replace NA with median
+# ratings <- apply(ratings, 2, medValue.f)
 
 # Create large dgCMatrix
-ratings <- as(ratings, 'dgCMatrix')
-ratings@Dimnames[1] <- list(as.character(1:nrow(ratings)))
+finalRatings <- as(ratings, 'realRatingMatrix')
 ```
 
-## Comparison of accuracy of two  Recommender Systems
+## Recommender Systems
+
+### Parameters
+
+We'll define the following: 
+
+* **Training Percent:** The percent of the data that should be used in training. The remaining data will be used for testing.
+* **Items To Keep:** The total number of items that will be used to generate the recommendations. The remaining items will be used to test the model accuracy. We'll identify the min number of jokes that an individual has rated and use a few less than that. 
+* **Rating Threshold:** The threshold to be used for positive ratings. Since our data is on a scale of -10 to 10, we will use 5 as the threshold. 
+```{r}
+
+trainPct <- 0.8
+toKeep <- min(rowCounts(finalRatings)) - 5
+ratingThreshold <- 5
+
+
+
+
+```
 
 ## Support for increased Serendepity|Novelty|Diversity- Business|User Experience
 
@@ -116,5 +121,4 @@ ratings@Dimnames[1] <- list(as.character(1:nrow(ratings)))
 ## Conclusion
 
 ## Reference
-
 
