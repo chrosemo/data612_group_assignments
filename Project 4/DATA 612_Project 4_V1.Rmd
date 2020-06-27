@@ -10,7 +10,7 @@ output:
     
 ---
 
-# Project Instructions
+## Assignment
 
 The goal of this assignment is give you practice working with accuracy and other recommender system metrics.
 
@@ -29,25 +29,22 @@ In this assignment you’re asked to do at least one or (if you like) both of th
 
 4. As part of your textual conclusion, discuss one or more additional experiments that could be performed and/or metrics that could be evaluated only if online evaluation was possible. Also, briefly propose how you would design a reasonable online evaluation environment.
 
-# Project Implementation
 
+# Introduction and Motivation
 
+In this assignment, we will create a system to provide joke recommendations to a user. The goal will be to intersperse the recommendations with serendipitous choices - in other words, switch out some of the top $n$ recommendations with recommendations not in the top $n$ results.  
 
+## Technique 
+First, we will need to identify which recommender system to use, so we will compare the output of 5 algorithms:
+
+* **UBCF** - user-based collaborative filtering with (1) cosine and (2) pearson similarity
+* **IBCF** - item-based collaborative filtering with (3) cosine and (4) pearson similarity
+* **RANDOM** - recommender system that provides random results (5)
+
+For each recommender system, we will use 3-fold cross-validation to generate predictions and measure the precision. Once we've identified the most suitable algorithm, we will introduce novel results into the recommendations by switching out a portion of the top $n$ recommendations. 
 
 ## Data Source
-We will be using the (jester)[http://eigentaste.berkeley.edu/dataset/] dataset for this assignment. This dataset contains data from 24,983 users who have rated 36 or more jokes. Ratings are real values ranging from $-10.00$ to $+10.00$ (the value "99" corresponds to "null" = "not rated"). Each row in the dataset represents a different user, and the first column represents the total number of jokes the individual has rated. The remaining 100 columns give the ratings for each joke. 
-
-
-## Motivation
-
-In this assignment, we will compare the output of 2 recommender systems:
-
-* **UBCF** - user-based collaborative filtering
-* **IBCF** - item-based collaborative filtering
-
-For each recommender system, we will use k-fold cross-validation 
-
-## Load Libraries
+We will be using the [jester](http://eigentaste.berkeley.edu/dataset/) dataset for this assignment. This dataset contains data from 24,983 users who have rated 36 or more jokes. Ratings are real values ranging from -10.00 to +10.00 (the value "99" corresponds to "null" = "not rated"). Each row in the dataset represents a different user, and the first column represents the total number of jokes the individual has rated. The remaining 100 columns give the ratings for each joke. 
 
 ```{r message=FALSE, include=FALSE}
 # load libraries
@@ -59,13 +56,13 @@ library(recommenderlab)
 library(readxl)
 ```
 
-## Load data
+# Data Cleansing
 
-First, we will load in the jester data set. We will remove the column with the number of rated jokes because this will not be used in the recommendation system. Additionally, the raw data stores non-rated jokes as the number $99$, so instead, we will replace these values with nulls. 
+First, we will load in the jester data set. We will remove the column with the number of rated jokes because this will not be used in the recommendation system. Additionally, the raw data represents non-rated jokes as the number 99, so we will replace these values with nulls. Finally, we will subset the data to 5,000 users to decrease computation time. 
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 # Read jester data
-jester <- read_xls("jester-data-1.xls", col_names = FALSE)
+jester <- data.frame(read_xls("jester-data-1.xls", col_names = FALSE))
 colnames(jester) <- c("ratingCount", seq(100))
 row.names(jester) <- 1:nrow(jester)
 
@@ -74,51 +71,191 @@ ratings <- jester[-1]
 
 # replace 0 (no rating) with NULL
 ratings[ratings == 99] <- NA
+ratings <- ratings[1:5000,]
 ratings <- as.matrix(ratings)
-
-# # function to replace the missing value with the median of the column
-# medValue.f <- function(x){
-#   x[is.na(x)] <- median(x, na.rm=TRUE) 
-#   return(x)
-# }
-# # Replace NA with median
-# ratings <- apply(ratings, 2, medValue.f)
 
 # Create large dgCMatrix
 finalRatings <- as(ratings, 'realRatingMatrix')
 ```
 
-## Recommender Systems
+## Data Exploration
 
-### Parameters
+```{r}
+
+# average rating
+
+```
+
+# Initial Recommender Systems
+
+## Parameters
 
 We'll define the following: 
 
 * **Training Percent:** The percent of the data that should be used in training. The remaining data will be used for testing.
 * **Items To Keep:** The total number of items that will be used to generate the recommendations. The remaining items will be used to test the model accuracy. We'll identify the min number of jokes that an individual has rated and use a few less than that. 
-* **Rating Threshold:** The threshold to be used for positive ratings. Since our data is on a scale of -10 to 10, we will use 5 as the threshold. 
+* **Rating Threshold:** The threshold to be used for positive ratings. Since our data is on a scale of -10 to 10, we will use 2 as the threshold for a good joke. 
+* **Number of Folds:** This is the number of folds that will be used for k-fold validation. 
+
+Finally, we'll define our evaluation scheme for the models.
 ```{r}
 
 trainPct <- 0.8
 toKeep <- min(rowCounts(finalRatings)) - 5
-ratingThreshold <- 5
+ratingThreshold <- 2
+nFold <- 3
 
-
-
+# define evaluation scheme
+evalScheme <- evaluationScheme(finalRatings, 
+                               method = "cross-validation", 
+                               k = nFold, 
+                               given = toKeep, 
+                               goodRating = ratingThreshold)
 
 ```
 
-## Support for increased Serendepity|Novelty|Diversity- Business|User Experience
+## Creation of Systems 
+Now that we've set up the evaluation scheme for our recommender systems, we can compare different models. We will evaluate the output of 2 IBCF models (using cosine and pearson similarities), 2 UBCF models (once again, using cosine and pearson similarities), and 1 random model for a baseline. We will also vary the number of recommendations from 5 to 20. 
+```{r}
+# models to compare
+evalModels <- list(
+ IBCF_cos = list(name = "IBCF", param = list(method =
+ "cosine")),
+ IBCF_cor = list(name = "IBCF", param = list(method =
+ "pearson")),
+ UBCF_cos = list(name = "UBCF", param = list(method =
+ "cosine")),
+ UBCF_cor = list(name = "UBCF", param = list(method =
+ "pearson")),
+ RANDOM = list(name = "RANDOM", param = NULL)
+)
 
-## Discussion
+# number of recommendations
+nRecs <- c(1, seq(5, 20, 5))
 
-### Variation in accuracy
+finalResults <- evaluate(x = evalScheme, method = evalModels, n = nRecs)
 
-### Additional experiments that can be performed|metrics that can be evaluated if only online evaluation was possible
+```
 
-### Proposed Design for Online Evaluation Environment
+## Comparisons
+We can look at the average results across all folds for each algorithm. Each row represents a different number of recommendations. We can see that on average, as the number of recommendations increases, so does our accuracy.
+```{r}
 
-## Conclusion
+avgs <- lapply(finalResults, avg)
+avgs
 
-## Reference
+```
+
+We can also visualize the ROC curves for each of the algorithms we've run. Each marker on the graph represents the TP/FP ratio for $n$ recommendations. The plot shows higher performance from the UBCF models. 
+
+```{r}
+
+plot(finalResults, annotate = 1, legend = "topleft")
+title("ROC curve")
+
+```
+
+The goal of our recommender system is to provide jokes that are funny to a user, so we want to minimize the number of false positives (recommendations that are wrong). We will therefore choose the algorithm with the highest precision (true positive rate). Once again, the UBCF models outperform the others.
+```{r}
+plot(finalResults, "prec/rec", annotate = 1, legend = "bottomright")
+title("Precision-recall")
+
+```
+
+## Model Tuning
+Based on this analysis, we will choose the UBCF model with Pearson similarity and 5 recommendations. We can further tune *nn* parameter for the the model. 
+
+```{r}
+
+numNeighbors <- seq(100,200,50)
+
+ubcfModels <- lapply(numNeighbors, function(n){
+ list(name = "UBCF", param = list(method = "pearson", nn = n))
+})
+names(ubcfModels) <- paste0("UBCF_", numNeighbors)
+
+ubcfSchemes <- evaluate(x = evalScheme, method = ubcfModels, n = 5)
+
+```
+We'll pick the model with the best precision:
+```{r}
+
+avg(ubcfSchemes)
+
+```
+
+## Final Model
+Now, we can define our final model and calculate the precision and RMSE:  
+
+```{r}
+set.seed(200)
+
+# UBCF Model
+ubcfRec <- Recommender(getData(evalScheme, "train"), 'UBCF', parameter = list(method = 'pearson', nn = 200, normalize = 'center'))
+ubcfPredN <- predict(ubcfRec, getData(evalScheme, "known"), n = 5)
+ubcfPredR <- predict(ubcfRec,getData(evalScheme,'known'), type = 'ratings')
+
+# calc accuracy on test set
+ubcfAccN <- calcPredictionAccuracy(ubcfPredN, 
+                                   getData(evalScheme, "unknown"), 
+                                   given = toKeep, 
+                                   goodRating = ratingThreshold)
+
+ubcfAccR <- calcPredictionAccuracy(ubcfPredR, getData(evalScheme, "unknown"))
+
+ubcfAccN
+ubcfAccR
+
+```
+
+
+# Introduce Serendipity
+In order to introduce novelty to the recommendations, we'll take a percentage of the top recommendations from the UBCF model and switch the recommendations out with randomly selected jokes. To do this, we'll define a recommendation system using the *RANDOM* methodology and then create a hybrid recommender that combines it with the UBCF model. 
+
+```{r}
+
+# Random Model
+randRec <- Recommender(getData(evalScheme, "train"), 'RANDOM')
+
+hybridRec <- HybridRecommender(ubcfRec,randRec, weights = c(0.8,0.2))
+hybridPredN <- predict(hybridRec, getData(evalScheme, "known"), n = 5)
+hybridPredR <- predict(hybridRec, getData(evalScheme,'known'), type = 'ratings')
+
+# calc accuracy on test set
+hybridAccN <- calcPredictionAccuracy(hybridPredN, 
+                                     getData(evalScheme, "unknown"), 
+                                     given = toKeep, 
+                                     goodRating = ratingThreshold)
+hybridAccR <- calcPredictionAccuracy(hybridPredR, getData(evalScheme, "unknown"))
+
+hybridAccN
+hybridAccR
+
+```
+
+# Compare Results
+We can compare the results of the UBCF-only model vs the hybrid model. The precision is worse in the hybrid model and the RMSE is higher.
+
+```{r}
+
+data.frame(METHOD = c('UBCF','HYBRID'), 
+           PRECISION = c(ubcfAccN['precision'], hybridAccN['precision']),
+           RMSE = c(ubcfAccR['RMSE'], hybridAccR['RMSE']))
+
+```
+
+We can also take a look at a comparison of the top 5 suggestions for one of the users. From this, we can see two things:
+
+* The ordering has changed in the recommendations.
+* There are new items in the hybrid system, which represent the random recommendations.
+```{r}
+hybridPredN@items[2]
+ubcfPredN@items[2]
+
+```
+
+# Discussion
+
+
+# Reference
 
