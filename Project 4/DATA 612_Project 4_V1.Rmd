@@ -81,10 +81,24 @@ finalRatings <- as(ratings, 'realRatingMatrix')
 ## Data Exploration
 
 ```{r}
-
 # average rating
+mean_rating <- colMeans(finalRatings, na.rm = T)
+quantile(mean_rating)
 
 ```
+
+
+```{r}
+goodrating <- quantile(mean_rating, .5)
+qplot(mean_rating) + ggtitle("Distribution of Joke Rating") + geom_vline(xintercept = goodrating, col='red')
+```
+
+
+```{r}
+#Heatmap of 
+image(finalRatings[1:100,], main="Heatmap: First 100 Users v Jokes")
+```
+
 
 # Initial Recommender Systems
 
@@ -156,6 +170,7 @@ title("ROC curve")
 ```
 
 The goal of our recommender system is to provide jokes that are funny to a user, so we want to minimize the number of false positives (recommendations that are wrong). We will therefore choose the algorithm with the highest precision (true positive rate). Once again, the UBCF models outperform the others.
+
 ```{r}
 plot(finalResults, "prec/rec", annotate = 1, legend = "bottomright")
 title("Precision-recall")
@@ -177,6 +192,7 @@ names(ubcfModels) <- paste0("UBCF_", numNeighbors)
 ubcfSchemes <- evaluate(x = evalScheme, method = ubcfModels, n = 5)
 
 ```
+
 We'll pick the model with the best precision:
 ```{r}
 
@@ -256,6 +272,16 @@ ubcfPredN@items[2]
 
 # Discussion
 
+Recommender systems can be evaluated offline or online. The purpose of evaluating a recommender system  is to select algorithms for use in a production setting.**Offline evaluations** test the effectiveness of recommender system algorithms on a certain dataset. **Online evaluation** attempts to evaluate recommender systems
+by a method called A/B testing where a part of users are served by recommender system A and the another part of users by recommender system B. The recommender system that achieves a higher score according to a chosen metric ( for example, Click-Through-Rate) is chosen as a better recommender system, given other factors such as latency and complexity are comparable (Gebremeskel & De Vries, n.d.).
+
+In this project, an offline evaluation was conducted. Precision and RMSE are two  evaluation metrics that were used to assess the  recommender algorithms. Serendepity was also introduced as a business goal.There is no guarantee that the absolute performance of these algorithms will hold in an online evaluation.
+
+In direct response to question four, one  metric that could be evaluated only if online evaluation was possible is  Click-Through-Rate (CTR). CTR is the ratio of clicked recommendations to displayed recommendations and reflects  rate of user acceptance and assumed satisfaction.In this case, the assumption is that when a user clicks, downloads, or buys a *recommended item*, the user **liked** the recommendation. This can inform the effect of  the introduced serendepity and/or also the level of serendepity that would be the most useful for favourable  future outcomes. 
+
+
 
 # Reference
+Gebremeskel, G., & De Vries, A. (n.d.). Recommender Systems Evaluations: Offline, Online, Time and A/A Test. Retrieved June 28, 2020, from http://ceur-ws.org/Vol-1609/16090642.pdf
 
+
