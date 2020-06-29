@@ -12,12 +12,10 @@ output:
 
 ## Assignment
 
-The goal of this assignment is give you practice working with accuracy and other recommender system metrics.
+The goal of this assignment is give you practice working with accuracy and other recommender system metrics.In this assignment you’re asked to do at least one or (if you like) both of the following:
 
-In this assignment you’re asked to do at least one or (if you like) both of the following:
-
-• Work in a small group, and/or
-• Choose a different dataset to work with from your previous projects.
+* Work in a small group, and/or
+* Choose a different dataset to work with from your previous projects.
 
 #### Deliverables
 
@@ -32,7 +30,7 @@ In this assignment you’re asked to do at least one or (if you like) both of th
 
 # Introduction and Motivation
 
-In this assignment, we will create a system to provide joke recommendations to a user. The goal will be to intersperse the recommendations with serendipitous choices - in other words, switch out some of the top $n$ recommendations with recommendations not in the top $n$ results.  
+In this assignment, we will create a system to provide joke recommendations to a user. The goal will be to intersperse the recommendations with serendipitous choices - in other words, switch out some of the top $n$ recommendations with recommendations *not* in the top $n$ results.  
 
 ## Technique 
 First, we will need to identify which recommender system to use, so we will compare the output of 5 algorithms:
@@ -58,7 +56,7 @@ library(readxl)
 
 # Data Cleansing
 
-First, we will load in the jester data set. We will remove the column with the number of rated jokes because this will not be used in the recommendation system. Additionally, the raw data represents non-rated jokes as the number 99, so we will replace these values with nulls. Finally, we will subset the data to 5,000 users to decrease computation time. 
+First, we will load in the jester data set. We will remove the column with the number of rated jokes because this will not be used in the recommendation system. Additionally, the raw data represents non-rated jokes as the number 99, so we will replace these values with nulls. Finally, we will subset the data to 5,000 users to speed up computation time. 
 
 ```{r, warning=FALSE, message=FALSE}
 # Read jester data
@@ -79,7 +77,30 @@ finalRatings <- as(ratings, 'realRatingMatrix')
 ```
 
 ## Data Exploration
+Let's dive a little deeper into our data.  
+  
+First, let's take a look at the number of jokes that each user has rated. We set the threshold at 36 jokes, and it appears that most individuals have rated either around 70 or 100 jokes. 
+```{r}
 
+jokeCount <- rowCounts(finalRatings)
+hist(jokeCount,
+     main = 'Number of Jokes Rated per User',
+     xlab = 'Number of Jokes Rated',
+     ylab = 'Number of Users')
+
+```
+
+Next, we can look at the number of ratings that each joke has. We can see that many of the jokes were rated by all 5000 users. 
+```{r}
+
+ratingCount <- colCounts(finalRatings)
+hist(ratingCount,
+     main = 'Number of Individuals Rating each Joke',
+     xlab = 'Number of Users that Rated Joke',
+     ylab = 'Number of Jokes')
+
+```
+Now we can take a look at the average rating across all jokes. The median average rating is a little over 0 (neutral), which means that jokes are typically rated with a small positive skew. 
 ```{r}
 # average rating
 mean_rating <- colMeans(finalRatings, na.rm = T)
@@ -87,17 +108,13 @@ quantile(mean_rating)
 
 ```
 
-
+We can also plot the average ratings. A look at the distribution shows that most jokes have an average rating between -2 and 3. We have a few outliers that are rated more positively (+4) and more negatively (-4).
 ```{r}
 goodrating <- quantile(mean_rating, .5)
-qplot(mean_rating) + ggtitle("Distribution of Joke Rating") + geom_vline(xintercept = goodrating, col='red')
+qplot(mean_rating) + ggtitle("Distribution of Average Joke Rating") + geom_vline(xintercept = goodrating, col='red')
 ```
 
-
-```{r}
-#Heatmap of 
-image(finalRatings[1:100,], main="Heatmap: First 100 Users v Jokes")
-```
+From this data exploration, we can see that most users rated all jokes and conversely, most jokes were rated by all users. The median average rating for the users is a little over 0, so we will use 1 as our threshold for a good joke. 
 
 
 # Initial Recommender Systems
@@ -108,7 +125,7 @@ We'll define the following:
 
 * **Training Percent:** The percent of the data that should be used in training. The remaining data will be used for testing.
 * **Items To Keep:** The total number of items that will be used to generate the recommendations. The remaining items will be used to test the model accuracy. We'll identify the min number of jokes that an individual has rated and use a few less than that. 
-* **Rating Threshold:** The threshold to be used for positive ratings. Since our data is on a scale of -10 to 10, we will use 2 as the threshold for a good joke. 
+* **Rating Threshold:** The threshold to be used for positive ratings. Since our data is on a scale of -10 to 10, we will use 1 as the threshold for a good joke. 
 * **Number of Folds:** This is the number of folds that will be used for k-fold validation. 
 
 Finally, we'll define our evaluation scheme for the models.
@@ -116,7 +133,7 @@ Finally, we'll define our evaluation scheme for the models.
 
 trainPct <- 0.8
 toKeep <- min(rowCounts(finalRatings)) - 5
-ratingThreshold <- 2
+ratingThreshold <- 1
 nFold <- 3
 
 # define evaluation scheme
@@ -193,7 +210,7 @@ ubcfSchemes <- evaluate(x = evalScheme, method = ubcfModels, n = 5)
 
 ```
 
-We'll pick the model with the best precision:
+We'll pick the model with the best precision, which is 200 neighbors:
 ```{r}
 
 avg(ubcfSchemes)
@@ -226,7 +243,7 @@ ubcfAccR
 
 
 # Introduce Serendipity
-In order to introduce novelty to the recommendations, we'll take a percentage of the top recommendations from the UBCF model and switch the recommendations out with randomly selected jokes. To do this, we'll define a recommendation system using the *RANDOM* methodology and then create a hybrid recommender that combines it with the UBCF model. 
+In order to introduce serendipity to the recommendations, we'll take a percentage of the top recommendations from the UBCF model and switch the recommendations out with randomly selected jokes. To do this, we'll define a recommendation system using the *RANDOM* methodology and then create a hybrid recommender that combines it with the UBCF model. 
 
 ```{r}
 
@@ -272,8 +289,7 @@ ubcfPredN@items[2]
 
 # Discussion
 
-Recommender systems can be evaluated offline or online. The purpose of evaluating a recommender system  is to select algorithms for use in a production setting.**Offline evaluations** test the effectiveness of recommender system algorithms on a certain dataset. **Online evaluation** attempts to evaluate recommender systems
-by a method called A/B testing where a part of users are served by recommender system A and the another part of users by recommender system B. The recommender system that achieves a higher score according to a chosen metric ( for example, Click-Through-Rate) is chosen as a better recommender system, given other factors such as latency and complexity are comparable (Gebremeskel & De Vries, n.d.).
+Recommender systems can be evaluated offline or online. The purpose of evaluating a recommender system  is to select algorithms for use in a production setting.**Offline evaluations** test the effectiveness of recommender system algorithms on a certain dataset. **Online evaluation** attempts to evaluate recommender systems by a method called A/B testing where a part of users are served by recommender system A and the another part of users by recommender system B. The recommender system that achieves a higher score according to a chosen metric ( for example, Click-Through-Rate) is chosen as a better recommender system, given other factors such as latency and complexity are comparable (Gebremeskel & De Vries, n.d.).
 
 In this project, an offline evaluation was conducted. Precision and RMSE are two  evaluation metrics that were used to assess the  recommender algorithms. Serendepity was also introduced as a business goal.There is no guarantee that the absolute performance of these algorithms will hold in an online evaluation.
 
