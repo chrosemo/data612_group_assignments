@@ -12,14 +12,13 @@ output:
 ## Assignment
 Find an interesting dataset and describe the system you plan to build out. If you would like to use one of the datasets you have already worked with, you should add a unique element or incorporate additional data. (i.e. explicit features you scrape from another source, like image analysis on movie posters). The overall goal, however, will be to produce quality recommendations by extracting insights from a large dataset. You may do so using Spark, or another distributed computing method, OR by effectively applying one of the more advanced mathematical techniques we have covered. There is no preference for one over the other, as long as your recommender works! 
 
-## Netflix Prize Dataset - Background
-We will be using the [Netflix Prize Dataset](http://academictorrents.com/details/9b13183dc4d60676b773c9e2cd6de5e5542cee9a) for our final project. Back in 2006, Netflix offered a prize of $\$1,000,000$ to anyone that could beat their movie recommendation system by an RMSE of $10\%$. In September 2009, Netflix awarded the grand prize to BellKor's Pragmatic Chaos team with a recommender system that beat Netflix by $10.06\%$.
 
-## The Data
-The dataset is a multivariate time-series and is composed of about $480,000$ users, $17,000$ movies and $100$ million ratings. Data was collected between October 1998 and December 2005. Each movie and user is represented by a unique integer id and ratings are on a scale of 1-5. Kaggle has released the data on [their website](https://www.kaggle.com/netflix-inc/netflix-prize-data) and we will use this as our base dataset.  
+## Dataset
+We intend to use the Netflix prize dataset for our final project. In 2006, Netflix offered a prize of $\$1,000,000$ to anyone that could beat its movie recommendation system by an RMSE of $10\%$. In September 2009, the company awarded the grand prize to BellKor's Pragmatic Chaos team, whose system beat Netflix's own by $10.06\%$. Kaggle publishes a form of the original prize dataset on [its website](https://www.kaggle.com/netflix-inc/netflix-prize-data); we will use these data as our training and test sets. The training dataset consists of four variables--movie ID, user ID, rating, and rating date--and describes approximately $480,000$ users making over $100$ million ratings of some $17,000$ movies. Netflix collected the data between October 1998 and December 2005. Each movie and user is represented by a unique integer identifier, and ratings range from 1 (worst) to 5 (best). 
 
-## The Recommender System 
-We were intrigued by the article 
+
+## Plans for Recommender System 
+We intend to use Spark, via R and likely *sparklyr*, to build a recommender system that predicts Netflix users' movie ratings. Spark offers the distributed platform necessary to work with the Netflix prize dataset, which to date has proved too large for our group's local machines to handle. Our intended system will draw on our previous assignments and select from a comparison of recommenders of different types. We expect to use matrix factorization in pre-processing, and we will employ various evaluation methods to select our final model.
 
 
 
