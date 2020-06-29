@@ -1,0 +1,28 @@
+---
+title: "DATA612 Final Project | Netflix Prize Dataset"
+author: "Amber Ferger, Charlie Rosemond, Juanelle Marks" 
+date: "7/1/2020"
+output: 
+    html_document:
+     theme: lumen
+     highlight: tango
+     toc: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Summary
+
+##Background
+
+##Data and Methodology
+
+##Recommenders
+
+##Evaluation and Selection
+
+##Conclusion
+
+##Sources
