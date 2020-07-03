@@ -8,7 +8,7 @@ output:
      highlight: tango
      toc: TRUE
 ---
-# Project Instructions
+## Assignment
 
 The goal of this project is give you practice beginning to work with a distributed recommender system. It is sufficient for this assignment to build out your application on a single node.
 
@@ -18,17 +18,92 @@ Please include in your conclusion: For your given recommender system’s data, a
 
 You may work on any platform of your choosing, including Databricks Community Edition or in local mode. You are encouraged but not required to work in a small group on this project.
 
-# Project Implementation
-
-## Data Source
-
-?
 
 ## Motivation
 
-?
+In this assignment, we create two alternating least squares (ALS) recommenders--one with *recommenderlab* and one with Apache Spark via *sparklyr*--and compare their performance. Our goal is to gain experience with Spark and begin to assess its advantages over a non-distributed platform.
 
-#Load libraries
+
+## Data source
+
+Our data source is the [Jester](http://eigentaste.berkeley.edu/dataset/) dataset, which contains data from 24,983 users who have rated 36 or more jokes. Ratings are real values ranging from -10.00 to +10.00 (the value "99" corresponds to "null" = "not rated"). Each row in the dataset represents a different user, and the first column represents the total number of jokes the individual has rated. The remaining 100 columns give the ratings for each joke. 
+
+
+### Load libraries
+
+```{r message=FALSE, include=FALSE}
+# load libraries
+library(tidyverse)
+library(pander)
+library(knitr)
+library(dplyr)
+library(recommenderlab)
+library(readxl)
+```
+
+### Read and prepare data
+
+We start by reading in the jester data, replacing the current null label ("99") with NULL values, and creating
+
+```{r, warning=FALSE, message=FALSE}
+# Read jester data
+jester <- data.frame(read_xls("jester-data-1.xls", col_names = FALSE))
+colnames(jester) <- c("ratingCount", seq(100))
+row.names(jester) <- 1:nrow(jester)
+
+# Remove num jokes column
+ratings <- jester[-1]
+
+# Replace 99 (no rating) with NULL
+ratings[ratings == 99] <- NA
+
+# Subset to first 5000 users
+ratings <- ratings[1:5000,]
+
+# Create large dgCMatrix
+ratings <- as.matrix(ratings)
+finalRatings <- as(ratings, 'realRatingMatrix')
+```
+
+## Exploratory data analysis
+
+We create two visualizations that describe the data, including histograms depicting joke ratings per user and ratings per joke. We also compare the mean and median joke ratings as well as the overall distribution of ratings.
+
+Approximately 1500 users rated between 95 and 100 jokes each, and approximately 1000 users rated between 70 and 75 jokes each. 
+
+```{r}
+jokeCount <- rowCounts(finalRatings)
+hist(jokeCount,
+     main = 'Number of Jokes Rated per User',
+     xlab = 'Number of Jokes Rated',
+     ylab = 'Number of Users')
+```
+
+
+Approximately 35 jokes have 4500 and 5000 ratings each, meaning nearly every user rated those jokes.
+
+```{r}
+ratingCount <- colCounts(finalRatings)
+hist(ratingCount,
+     main = 'Number of Users Rating each Joke',
+     xlab = 'Number of Users that Rated Joke',
+     ylab = 'Number of Jokes')
+```
+  
+
+The mean rating is approximately 0.89, or just above neutral. Relative to the mean, the median of 1.5 indicates a slight left skew--a shape borne out by a histogram of the ratings.
+
+```{r}
+mean(finalRatings@data@x, na.rm = T)
+summary(finalRatings@data@x, na.rm = T)
+hist(finalRatings@data@x, main = "Histogram of ratings")
+```
+
+## Recommenders
+
+We compare alternating least squares recommenders built using *recommenderlab* and Spark via *sparklyr*.
+
+### recommenderlab
 
 ## Discussion
 
