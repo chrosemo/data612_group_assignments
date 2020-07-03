@@ -9,7 +9,6 @@ output:
      toc: TRUE
 ---
 ## Assignment
-
 The goal of this project is give you practice beginning to work with a distributed recommender system. It is sufficient for this assignment to build out your application on a single node.
 
 Adapt one of your recommendation systems to work with Apache Spark and compare the performance with your previous iteration. Consider the efficiency of the system and the added complexity of using Spark. You may complete the assignment using PySpark (Python), SparkR (R) , sparklyr (R), or Scala.
@@ -20,17 +19,14 @@ You may work on any platform of your choosing, including Databricks Community Ed
 
 
 ## Motivation
-
 In this assignment, we create two alternating least squares (ALS) recommenders--one with *recommenderlab* and one with Apache Spark via *sparklyr*--and compare their performance. Our goal is to gain experience with Spark and begin to assess its advantages over a non-distributed platform.
 
 
 ## Data source
-
 Our data source is the [Jester](http://eigentaste.berkeley.edu/dataset/) dataset, which contains data from 24,983 users who have rated 36 or more jokes. Ratings are real values ranging from -10.00 to +10.00 (the value "99" corresponds to "null" = "not rated"). Each row in the dataset represents a different user, and the first column represents the total number of jokes the individual has rated. The remaining 100 columns give the ratings for each joke. 
 
 
 ### Load libraries
-
 ```{r message=FALSE, include=FALSE}
 # load libraries
 library(tidyverse)
@@ -39,10 +35,10 @@ library(knitr)
 library(dplyr)
 library(recommenderlab)
 library(readxl)
+library(sparklyr)
 ```
 
 ### Read and prepare data
-
 We start by reading in the jester data, replacing the current null label ("99") with NULL values, and creating
 
 ```{r, warning=FALSE, message=FALSE}
@@ -66,8 +62,7 @@ finalRatings <- as(ratings, 'realRatingMatrix')
 ```
 
 ## Exploratory data analysis
-
-We create two visualizations that describe the data, including histograms depicting joke ratings per user and ratings per joke. We also compare the mean and median joke ratings as well as the overall distribution of ratings.
+We create two visualizations to describe the data: histograms depicting joke ratings per user and ratings per joke. We also compare the mean and median joke ratings as well as the overall distribution of ratings.
 
 Approximately 1500 users rated between 95 and 100 jokes each, and approximately 1000 users rated between 70 and 75 jokes each. 
 
@@ -101,9 +96,40 @@ hist(finalRatings@data@x, main = "Histogram of ratings")
 
 ## Recommenders
 
-We compare alternating least squares recommenders built using *recommenderlab* and Spark via *sparklyr*.
+We build then compare ALS recommenders built using *recommenderlab* and Spark via *sparklyr*. We will evaluate the recommenders using error and prediction time.
 
 ### recommenderlab
+We start with *recommenderlab*. We split the ratings matrix into train (0.8) and test (0.2) sets; for test users, give 15 items; and set a good rating as 2 given the mean and median.
+
+```{r}
+# Defining an evaluation scheme
+set.seed(612)
+trainPct <- 0.8
+toKeep <- 15
+ratingThreshold <- 2
+# define evaluation scheme
+e <- evaluationScheme(finalRatings, method = "split", train = trainPct, given = toKeep, goodRating = ratingThreshold)
+```
+
+Next, we train our ALS recommender, setting 10 latent factors and 10 iterations, and use it to predict ratings.
+
+```{r}
+recclab_recc <- Recommender(getData(e, "train"), method = "ALS", param = list(n_factors = 10, n_iterations = 10, seed = 612))
+```
+
+```{r}
+start <- Sys.time()
+recclab_pred <- predict(recclab_recc, getData(e, "known"), type="ratings")
+stop <- Sys.time()
+```
+
+The *recommenderlab* recommender produces an approximate RMSE of 5.2, an MSE of 26.7, and an MAE of 3.9. Prediction took a relatively substantial length of time (roughly 4 minutes).
+
+```{r}
+(recclab_error <- calcPredictionAccuracy(recclab_pred, getData(e, "unknown")))
+(recclab_time <- stop - start)
+```
+
 
 ## Discussion
 
