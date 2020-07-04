@@ -47,30 +47,61 @@ We start by reading in the jester data and replacing the current null values ("9
 jester <- data.frame(read_xls("jester-data-1.xls", col_names = FALSE))
 colnames(jester) <- c("ratingCount", seq(100))
 row.names(jester) <- 1:nrow(jester)
-ratings <- jester[-1] # remove joke count column
+
+# Remove num jokes column
+ratings <- jester[-1]
 
 # Replace 99 (no rating) with NA
 ratings[ratings == 99] <- NA
+
+# Subset to first 5000 users
+ratings <- ratings[1:5000,]
+
+# Create user- and item-specific rating counts
+jokeCount <- rowSums(!is.na(ratings))
+userCount <- colSums(!is.na(ratings))
 
 # Function to replace NA with column medians
 medValue.f <- function(x){
    x[is.na(x)] = median(x, na.rm=TRUE) 
    return(x)
 }
-ratings <- apply(ratings, 2, medValue.f)
-
-# Subset to first 5000 users
-ratings <- ratings[1:5000,]
+ratings_impute <- apply(ratings, 2, medValue.f)
 ```
 
 ```{r}
 # Create large dgCMatrix
-ratings_matrix <- as.matrix(ratings)
+ratings_matrix <- as.matrix(ratings_impute)
 recclab_ratings <- as(ratings_matrix, 'realRatingMatrix')
 ```
 
 ## Exploratory data analysis
+First, we explore the data prior to imputation.
 
+```{r}
+hist(jokeCount,
+     main = 'Number of Jokes Rated per User',
+     xlab = 'Number of Jokes Rated',
+     ylab = 'Number of Users')
+```
+
+
+```{r}
+hist(userCount,
+     main = 'Number of Individuals Rating each Joke',
+     xlab = 'Number of Users that Rated Joke',
+     ylab = 'Number of Jokes')
+```
+  
+ 
+```{r}
+# Mean and median joke rating
+(mean(as.matrix(ratings), na.rm = TRUE))
+(median(as.matrix(ratings), na.rm = TRUE))
+
+# Histogram of ratings
+hist(as.matrix(ratings), main = "Histogram of ratings")
+```
 
 ## Recommenders
 We compare ALS recommenders built using *recommenderlab* and Spark via *sparklyr*.
