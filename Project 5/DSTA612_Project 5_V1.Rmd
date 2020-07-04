@@ -63,6 +63,9 @@ recclab_ratings <- as(rating_matrix, 'realRatingMatrix')
 ```
 
 ## Exploratory data analysis
+
+#### Working on this section ####
+
 We create two visualizations that describe the data, including histograms depicting joke ratings per user and ratings per joke. We also compare the mean and median joke ratings as well as the overall distribution of ratings.
 
 Approximately 1500 users rated between 95 and 100 jokes each, and approximately 1000 users rated between 70 and 75 jokes each. 
@@ -99,6 +102,7 @@ hist(recclab_ratings@data@x, main = "Histogram of ratings")
 We compare ALS recommenders built using *recommenderlab* and Spark via *sparklyr*.
 
 ### recommenderlab
+
 We start with *recommenderlab*. We split the ratings matrix into train (0.8) and test (0.2) sets; for test users, give 15 items; and set a good rating as 2 given the mean and median.
 
 ```{r}
@@ -114,40 +118,73 @@ e <- evaluationScheme(recclab_ratings, method = "split", train = trainPct, given
 Next, we train our ALS recommender, setting 10 latent factors and 10 iterations, and use it to predict ratings. Prediction takes a relatively substantial length of time (approximately 4 minutes).
 
 ```{r}
-recclab_recc <- Recommender(getData(e, "train"), method = "ALS", param = list(n_factors = 10, n_iterations = 10, seed = 612))
+recclab_recc <- Recommender(getData(e, "train"), method = "ALS", param = list(n_factors = 10, lambda = 0.1, n_iterations = 10, seed = 612))
 ```
 
 ```{r}
 start <- Sys.time()
 recclab_pred <- predict(recclab_recc, getData(e, "known"), type="ratings")
 stop <- Sys.time()
-stop - start
 ```
-
 
 ```{r}
 (recclab_error <- calcPredictionAccuracy(recclab_pred, getData(e, "unknown")))
+(recclab_time <- stop - start)
 ```
 
 
 ### sparklyr
-Next, we move to Spark and *sparklyr*. We start by restructuring the original ratings data and creating a local Spark connection.
+
+Next, we move to Spark and *sparklyr*. We start by restructuring the ratings data to facilitate modeling.
 
 ```{r}
-ratings$userID <- 1:nrow(ratings)
-ratings <- ratings %>% gather("movieID", "rating", -userID)
-ratings$movieID <- as.numeric(ratings$movieID)
-ratings$rating <- as.numeric(ratings$rating)
+# function to replace NA with the median of the column
+ratings_df <- as.data.frame(ratings)
 ```
+
+```{r}
+ratings_df$userID <- 1:nrow(ratings_df)
+ratings_df <- ratings_df %>% gather("movieID", "rating", -userID)
+ratings_df$movieID <- as.numeric(ratings_df$movieID)
+ratings_df$rating <- as.numeric(ratings_df$rating)
+ratings_df <- arrange(ratings_df, userID, movieID)
+```
+
+
+Our work in Spark starts with establishing a local connection.
 
 ```{r}
 sc <- spark_connect(master = "local", spark_home = "C:\\Spark\\spark-2.4.6-bin-hadoop2.7")
 ```
 
-We then copy the restructured ratings data into a Spark dataframe.
+
+We create a tbl_spark object containing the long ratings dataframe.
 
 ```{r}
-spark_ratings <- sdf_copy_to(sc, ratings, "spark_ratings", overwrite = TRUE)
+sparklyr_ratings <- sdf_copy_to(sc, ratings_df)
+```
+
+
+Next, we build then make predictions using an ALS recommender with parameters that mirror those of the model built with *recommenderlab*.
+
+```{r}
+sparklyr_recc <- ml_als(sparklyr_ratings, rating_col = "rating", user_col = "userID", item_col = "movieID", rank = 10, reg_param = 0.1, max_iter = 10)
+```
+
+```{r}
+start <- Sys.time()
+sparklyr_pred <- ml_predict(sparklyr_recc, sparklyr_ratings)
+stop <- Sys.time()
+```
+
+```{r}
+(sparklyr_error = c(
+  "RMSE" = RMSE(sparklyr_df$rating, sparklyr_df$prediction),
+  "MSE" = MSE(sparklyr_df$rating, sparklyr_df$prediction),
+  "MAE" = MAE(sparklyr_df$rating, sparklyr_df$prediction)
+  )
+)
+(sparklyr_time <- stop - start) 
 ```
 
 
