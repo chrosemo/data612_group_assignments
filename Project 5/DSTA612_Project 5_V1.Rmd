@@ -190,6 +190,9 @@ sparklyr_df <- as.data.frame(sparklyr_pred)
 (sparklyr_time <- stop - start) 
 ```
 
+```{r}
+spark_disconnect(sc)
+```
 
 ## Discussion
 
