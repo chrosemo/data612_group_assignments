@@ -141,8 +141,7 @@ stop <- Sys.time()
 Next, we move to Spark and *sparklyr*. We start by restructuring the ratings data to facilitate modeling.
 
 ```{r}
-# function to replace NA with the median of the column
-ratings_df <- as.data.frame(ratings)
+ratings_df <- as.data.frame(ratings_impute)
 ```
 
 ```{r}
@@ -168,10 +167,10 @@ sparklyr_ratings <- sdf_copy_to(sc, ratings_df)
 ```
 
 
-We then build and make predictions using an ALS recommender with parameters that mirror those of the model built with *recommenderlab*.
+Next, we build then make predictions using an ALS recommender with parameters that mirror those of the model built with *recommenderlab*.
 
 ```{r}
-sparklyr_recc <- ml_als(sparklyr_ratings, rating ~ user + item, rank = 10, reg_param = 0.1, max_iter = 10)
+sparklyr_recc <- ml_als(sparklyr_ratings, rating_col = "rating", user_col = "user", item_col = "item", rank = 10, reg_param = 0.1, max_iter = 10)
 ```
 
 ```{r}
@@ -181,7 +180,8 @@ stop <- Sys.time()
 ```
 
 ```{r}
-(sparklyr_error = c(
+sparklyr_df <- as.data.frame(sparklyr_pred)
+(sparklyr_error <- c(
   "RMSE" = RMSE(sparklyr_df$rating, sparklyr_df$prediction),
   "MSE" = MSE(sparklyr_df$rating, sparklyr_df$prediction),
   "MAE" = MAE(sparklyr_df$rating, sparklyr_df$prediction)
