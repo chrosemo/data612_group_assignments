@@ -1,5 +1,5 @@
 ---
-title: "DATA612_Project 5 | IMPLEMENTING A RECOMMENDER SYSTEM ON SPARK"
+title: "DATA 612: Project 5 | Implementing a Recommender System on Spark"
 author: "Amber Ferger, Charlie Rosemond, Juanelle Marks" 
 date: "6/14/2020"
 output: 
@@ -187,7 +187,7 @@ ratings_df <- arrange(ratings_df, user, item)
 
 Our work in Spark starts with establishing a local connection. Here we’ll connect to a local instance of Spark via the spark_connect function:
 ```{r}
-#sc <- spark_connect(master = "local", spark_home = "C:\\Spark\\spark-2.4.6-bin-hadoop2.7")
+#sc <- spark_connect(master = "local", spark_home = "C:/Spark/spark-2.4.6-bin-hadoop2.7/tmp/hadoop")
 sc <- spark_connect(master = "local")
 ```
 
