@@ -26,8 +26,6 @@ In this assignment, we create two alternating least squares (ALS) recommenders--
 Our data source is the [Jester](http://eigentaste.berkeley.edu/dataset/) dataset, which contains data from 24,983 users who have rated 36 or more jokes. Ratings are real values ranging from -10.00 to +10.00 (the value "99" corresponds to "null" = "not rated"). Each row in the dataset represents a different user, and the first column represents the total number of jokes the individual has rated. The remaining 100 columns give the ratings for each joke. 
 
 
-### Load libraries
-
 ```{r message=FALSE, include=FALSE}
 # load libraries
 library(tidyverse)
@@ -36,11 +34,16 @@ library(knitr)
 library(dplyr)
 library(recommenderlab)
 library(readxl)
+library(tictoc)
 library(sparklyr)
+
+# install a local version of Spark for development purposes
+# spark_install()
 ```
 
 ### Read and prepare data
-We start by reading in the jester data and replacing the current null values ("99") with median ratings for each joke. We then subset to the first 5000 users and prepare a matrix for the recommender.
+
+First, we will load in the jester data set. We will remove the column with the number of rated jokes because this will not be used in the recommendation system. Additionally, the raw data represents non-rated jokes as the number 99, so we will replace these values with nulls. Finally, we will subset the data to 5,000 users to speed up computation time. 
 
 ```{r, warning=FALSE, message=FALSE}
 # Read jester data
@@ -61,22 +64,12 @@ ratings <- ratings[1:5000,]
 jokeCount <- rowSums(!is.na(ratings))
 userCount <- colSums(!is.na(ratings))
 
-# Function to replace NA with column medians
-medValue.f <- function(x){
-   x[is.na(x)] = median(x, na.rm=TRUE) 
-   return(x)
-}
-ratings_impute <- apply(ratings, 2, medValue.f)
 ```
 
-```{r}
-# Create large dgCMatrix
-ratings_matrix <- as.matrix(ratings_impute)
-recclab_ratings <- as(ratings_matrix, 'realRatingMatrix')
-```
 
-## Exploratory data analysis
-First, we explore the data prior to imputation.
+### Exploratory data analysis
+
+First, let's take a look at the number of jokes that each user has rated. The dataset has a threshold of users that have rated at least 36 jokes, and it appears that most individuals have rated either around 70 or 100 jokes. 
 
 ```{r}
 hist(jokeCount,
@@ -85,6 +78,7 @@ hist(jokeCount,
      ylab = 'Number of Users')
 ```
 
+Next, we can look at the number of ratings that each joke has. We can see that many of the jokes were rated by all 5000 users. 
 
 ```{r}
 hist(userCount,
@@ -92,22 +86,52 @@ hist(userCount,
      xlab = 'Number of Users that Rated Joke',
      ylab = 'Number of Jokes')
 ```
-  
+
+Now we can take a look at the ratings across all jokes. The mean rating is a little over 0 and the median rating is 1.5. 
  
 ```{r}
 # Mean and median joke rating
-(mean(as.matrix(ratings), na.rm = TRUE))
-(median(as.matrix(ratings), na.rm = TRUE))
 
-# Histogram of ratings
-hist(as.matrix(ratings), main = "Histogram of ratings")
+paste0('Mean Rating : ', mean(as.matrix(ratings), na.rm = TRUE))
+paste0('Median Rating: ', median(as.matrix(ratings), na.rm = TRUE))
+
 ```
+
+A histogram of the ratings shows a left-skew, which means that more jokes are rated positively. 
+```{r}
+# Histogram of ratings
+hist(as.matrix(ratings), 
+     main = "Histogram of ratings",
+     xlab = 'Rating',
+     ylab = 'Number of jokes')
+
+```
+
+### Impute missing data 
+
+Finally, we will impute our missing data with the median rating for each joke. 
+
+```{r}
+
+# Function to replace NA with column medians
+medValue.f <- function(x){
+   x[is.na(x)] = median(x, na.rm=TRUE) 
+   return(x)
+}
+ratings_impute <- apply(ratings, 2, medValue.f)
+
+# Create large dgCMatrix
+ratings_matrix <- as.matrix(ratings_impute)
+recclab_ratings <- as(ratings_matrix, 'realRatingMatrix')
+
+```
+
 
 ## Recommenders
 We compare ALS recommenders built using *recommenderlab* and Spark via *sparklyr*.
 
 ### recommenderlab
-We start with *recommenderlab*. We split the ratings matrix into train (0.8) and test (0.2) sets; for test users, give 15 joke items; and set a good rating as 2 given the mean and median.
+We start with *recommenderlab*. We split the ratings matrix into train (0.8) and test (0.2) sets; for test users, give 15 joke items and set a good rating as 2 given the mean and median. Next, we train our ALS recommender, setting 10 latent factors and 10 iterations, and use it to predict ratings. Prediction takes a relatively substantial length of time (approximately 5 minutes).
 
 ```{r}
 # Defining an evaluation scheme
@@ -115,36 +139,45 @@ set.seed(612)
 trainPct <- 0.8
 toKeep <- 15
 ratingThreshold <- 2
+
 # define evaluation scheme
-e <- evaluationScheme(recclab_ratings, method = "split", train = trainPct, given = toKeep, goodRating = ratingThreshold)
-```
+tic("Train - recommenderlab")
+e <- evaluationScheme(recclab_ratings, 
+                      method = "split", 
+                      train = trainPct, 
+                      given = toKeep, 
+                      goodRating = ratingThreshold)
 
-Next, we train our ALS recommender, setting 10 latent factors and 10 iterations, and use it to predict ratings. Prediction takes a relatively substantial length of time (approximately 5 minutes).
+# training recommender system
+recclab_recc <- Recommender(getData(e, "train"), 
+                            method = "ALS", 
+                            param = list(n_factors = 10, 
+                                         lambda = 0.1, 
+                                         n_iterations = 10, 
+                                         seed = 612))
+toc(log = TRUE, quiet = TRUE)
 
-```{r}
-recclab_recc <- Recommender(getData(e, "train"), method = "ALS", param = list(n_factors = 10, lambda = 0.1, n_iterations = 10, seed = 612))
-```
-
-```{r}
+# predicting 
 start <- Sys.time()
+tic("Predict - recommenderlab")
 recclab_pred <- predict(recclab_recc, getData(e, "known"), type="ratings")
+toc(log = TRUE, quiet = TRUE)
 stop <- Sys.time()
 ```
 
+We can see the prediction error as well as the total time it takes to predict. 
 ```{r}
 (recclab_error <- calcPredictionAccuracy(recclab_pred, getData(e, "unknown")))
 (recclab_time <- stop - start)
+
 ```
 
 
 ### sparklyr
-Next, we move to Spark and *sparklyr*. We start by restructuring the ratings data to facilitate modeling.
+Next, we move to Spark and *sparklyr*. We start by restructuring the ratings data to facilitate modeling. Each row in this new dataset will represent a user's rating for a particular joke. 
 
 ```{r}
 ratings_df <- as.data.frame(ratings_impute)
-```
-
-```{r}
 ratings_df$user <- 1:nrow(ratings_df)
 ratings_df <- ratings_df %>% gather("item", "rating", -user)
 ratings_df$item <- as.numeric(ratings_df$item)
@@ -152,13 +185,11 @@ ratings_df$rating <- as.numeric(ratings_df$rating)
 ratings_df <- arrange(ratings_df, user, item)
 ```
 
-
-Our work in Spark starts with establishing a local connection.
-
+Our work in Spark starts with establishing a local connection. Here we’ll connect to a local instance of Spark via the spark_connect function:
 ```{r}
-sc <- spark_connect(master = "local", spark_home = "C:\\Spark\\spark-2.4.6-bin-hadoop2.7")
+#sc <- spark_connect(master = "local", spark_home = "C:\\Spark\\spark-2.4.6-bin-hadoop2.7")
+sc <- spark_connect(master = "local")
 ```
-
 
 We create a tbl_spark object containing the long ratings dataframe.
 
@@ -166,19 +197,30 @@ We create a tbl_spark object containing the long ratings dataframe.
 sparklyr_ratings <- sdf_copy_to(sc, ratings_df)
 ```
 
-
-Next, we build then make predictions using an ALS recommender with parameters that mirror those of the model built with *recommenderlab*.
-
-```{r}
-sparklyr_recc <- ml_als(sparklyr_ratings, rating_col = "rating", user_col = "user", item_col = "item", rank = 10, reg_param = 0.1, max_iter = 10)
-```
+Next, we will create an ALS recommender with parameters that mirror those of the model built with *recommenderlab*. We can log the start and end time for training and prediction. 
 
 ```{r}
-start <- Sys.time()
+
+# train
+tic("Train - sparklyr")
+sparklyr_recc <- ml_als(sparklyr_ratings, 
+                        rating_col = "rating", 
+                        user_col = "user", 
+                        item_col = "item", 
+                        rank = 10, 
+                        reg_param = 0.1, 
+                        max_iter = 10)
+toc(log = TRUE, quiet = TRUE)
+
+# predict
+sparkStart <- Sys.time()
+tic("Predict - sparklyr")
 sparklyr_pred <- ml_predict(sparklyr_recc, sparklyr_ratings)
-stop <- Sys.time()
+toc(log = TRUE, quiet = TRUE)
+sparkEnd <- Sys.time()
 ```
 
+We can also look at the calculation errors and total time for prediction.
 ```{r}
 sparklyr_df <- as.data.frame(sparklyr_pred)
 (sparklyr_error <- c(
@@ -187,15 +229,41 @@ sparklyr_df <- as.data.frame(sparklyr_pred)
   "MAE" = MAE(sparklyr_df$rating, sparklyr_df$prediction)
   )
 )
-(sparklyr_time <- stop - start) 
+(sparklyr_time <- sparkEnd - sparkStart) 
+
 ```
 
 ```{r}
 spark_disconnect(sc)
 ```
 
+
+## Comparison
+Now that we've run models using both *recommenderlab* and *sparklyr*, we can compare the performance in terms of computation time. This is easy to do using the *tiktok* package. 
+```{r}
+
+log <- as.data.frame(unlist(tic.log(format = TRUE)))
+colnames(log) <- c("Run Time")
+
+
+knitr::kable(log, format = "html") %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+
+We can also see the difference in errors:
+
+```{r}
+
+rbind(sparklyr_error, recclab_error)
+
+```
+
 ## Discussion
 
-## Conclusion
-
-## Reference
+* **Computation Time**: The value in using Spark is that we can process large datasets becuase the computation is distributed amongst a cluster. As expected, this holds true for our example case. We can see from the time logs that the *recommenderlab* system took over 300 seconds to train and predict, whereas the *sparklyr* implementation took under 15 seconds (Spark was over 27 times faster than recommenderlab!)
+* **Prediction Errors**: Interestingly, the *sparklyr* system performed better than the *recommenderlab* system in terms of prediction error. 
+  
+**At what point would you see moving to a distributed platform such as Spark becoming necessary?** Even with this small dataset (5000 users, 100 jokes, 500,000 ratings), we see a drastic improvement by using Spark for the processing. Although the original recommender system using recommenderlab only took about 5 minutes to train, it would be advantageous to speed this up for development purposes. That being said, using Spark for any system that is trained on a dataset of more than 100,000 ratings or so would be of value.  
+  
+On a more practical sense, using a distributed platform becomes *necessary* when the computation becomes too large to fit in memory. When we use something like Spark, it can split up the computation into chunks and manage the scheduling so that the computation can be completed without crashing.  
