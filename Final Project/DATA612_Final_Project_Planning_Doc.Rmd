@@ -1,7 +1,7 @@
 ---
 title: 'DATA 612: Final Project Planning Document'
 author: "Amber Ferger, Charlie Rosemond, Juanelle Marks"
-date: "6/23/2020"
+date: "7/06/2020"
 output: 
     html_document:
      theme: lumen
@@ -14,11 +14,10 @@ Find an interesting dataset and describe the system you plan to build out. If yo
 
 
 ## Dataset
-We intend to use the Netflix prize dataset for our final project. In 2006, Netflix offered a prize of $\$1,000,000$ to anyone that could beat its movie recommendation system by an RMSE of $10\%$. In September 2009, the company awarded the grand prize to BellKor's Pragmatic Chaos team, whose system beat Netflix's own by $10.06\%$. Kaggle publishes a form of the original prize dataset on [its website](https://www.kaggle.com/netflix-inc/netflix-prize-data); we will use these data as our training and test sets. The training dataset consists of four variables--movie ID, user ID, rating, and rating date--and describes approximately $480,000$ users making over $100$ million ratings of some $17,000$ movies. Netflix collected the data between October 1998 and December 2005. Each movie and user is represented by a unique integer identifier, and ratings range from 1 (worst) to 5 (best). 
+We intend to use the Jester joke dataset for our final project. Jester is a joke recommender system developed by the University of California, Berkeley Laboratory of Automation Science and Engineering. The Jester dataset contains millions of joke ratings made by users of the recommender system, which learns from new users. Our chosen dataset--several Jester sets of different sizes are available--describes approximately 80,000 users making over 2.3 million ratings of 150 different jokes. The Jester team collected these ratings from April 1999 to May 2003 and November 2006 to March 2015. Each user and joke is represented by a unique integer identifier, and ratings range from -10 (worst) to +10 (best). Learn more about Jester [here](http://eigentaste.berkeley.edu/about.html).
 
 
 ## Plans for Recommender System 
-We intend to use Spark, via R and likely *sparklyr*, to build a recommender system that predicts Netflix users' movie ratings. Spark offers the distributed platform necessary to work with the Netflix prize dataset, which to date has proved too large for our group's local machines to handle. Our intended system will draw on our previous assignments and select from a comparison of recommenders of different types. We expect to use matrix factorization in pre-processing, and we will employ various evaluation methods to select our final model.
-
+We intend to use Spark, via R and likely *sparklyr*, to build a recommender system that predicts Jester users' joke ratings. Spark offers the distributed platform necessary to work with the larger Jester dataset, which would otherwise prove too large for our group's local machines to handle. Our intended system will draw on our previous assignments and select from a comparison of recommenders of different types. We expect to use matrix factorization in pre-processing, and we will employ various evaluation methods to select our final model.
 
 
