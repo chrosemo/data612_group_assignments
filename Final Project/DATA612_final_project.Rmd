@@ -1,5 +1,5 @@
 ---
-title: "DATA612 Final Project | Netflix Prize Dataset"
+title: "DATA612 Final Project | Jester Dataset"
 author: "Amber Ferger, Charlie Rosemond, Juanelle Marks" 
 date: "7/1/2020"
 output: 
@@ -13,16 +13,35 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-##Summary
+## About the Dataset
+Jester is a joke recommender system developed by the University of California, Berkeley Laboratory of Automation Science and Engineering. The Jester dataset contains millions of joke ratings made by users of the recommender system, which learns from new users. Our chosen dataset–several Jester sets of different sizes are available–describes approximately 80,000 users making over 2.3 million ratings of 150 different jokes. The Jester team collected these ratings from April 1999 to May 2003 and November 2006 to March 2015. Each user and joke is represented by a unique integer identifier, and ratings range from -10 (worst) to +10 (best). Learn more about Jester here.
 
-##Background
+## Project Goals
+We intend to use Spark, via R and likely sparklyr, to build a recommender system that predicts Jester users’ joke ratings. Spark offers the distributed platform necessary to work with the larger Jester dataset, which would otherwise prove too large for our group’s local machines to handle. Our intended system will draw on our previous assignments and select from a comparison of recommenders of different types. We expect to use matrix factorization in pre-processing, and we will employ various evaluation methods to select our final model.
 
-##Data and Methodology
+## Load Libraries
 
-##Recommenders
+```{r message=FALSE, include=FALSE}
+# load libraries
+library(tidyverse)
+library(pander)
+library(knitr)
+library(dplyr)
+library(recommenderlab)
+library(readxl)
+library(tictoc)
+library(sparklyr)
 
-##Evaluation and Selection
+# install a local version of Spark for development purposes
+# spark_install()
+```
 
-##Conclusion
+## Data Processing
+
+## Recommenders
+
+## Evaluation and Selection
+
+## Conclusion
 
 ##Sources
