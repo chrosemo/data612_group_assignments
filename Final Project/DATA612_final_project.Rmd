@@ -13,30 +13,101 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## About the Dataset
-Jester is a joke recommender system developed by the University of California, Berkeley Laboratory of Automation Science and Engineering. The Jester dataset contains millions of joke ratings made by users of the recommender system, which learns from new users. Our chosen dataset–several Jester sets of different sizes are available–describes approximately 80,000 users making over 2.3 million ratings of 150 different jokes. The Jester team collected these ratings from April 1999 to May 2003 and November 2006 to March 2015. Each user and joke is represented by a unique integer identifier, and ratings range from -10 (worst) to +10 (best). Learn more about Jester here.
-
-## Project Goals
-We intend to use Spark, via R and likely sparklyr, to build a recommender system that predicts Jester users’ joke ratings. Spark offers the distributed platform necessary to work with the larger Jester dataset, which would otherwise prove too large for our group’s local machines to handle. Our intended system will draw on our previous assignments and select from a comparison of recommenders of different types. We expect to use matrix factorization in pre-processing, and we will employ various evaluation methods to select our final model.
-
-## Load Libraries
-
 ```{r message=FALSE, include=FALSE}
 # load libraries
 library(tidyverse)
-library(pander)
-library(knitr)
 library(dplyr)
-library(recommenderlab)
 library(readxl)
-library(tictoc)
 library(sparklyr)
+
+#library(stringr)
+library(tm)
+library(tidyr)
+library(tidytext)
 
 # install a local version of Spark for development purposes
 # spark_install()
 ```
 
+## Project Goals
+We will be using Spark, via R and sparklyr, to build a recommender system that predicts Jester users’ joke ratings. Spark offers the distributed platform necessary to work with the larger Jester dataset, which would otherwise prove too large for our group’s local machines to handle. Our intended system will draw on our previous assignments and select from a comparison of recommenders of different types. We expect to use matrix factorization in pre-processing, and we will employ various evaluation methods to select our final model.
+
+## About the Dataset
+Jester is a joke recommender system developed by the University of California, Berkeley Laboratory of Automation Science and Engineering. The Jester dataset contains millions of joke ratings made by users of the recommender system, which learns from new users. Our chosen dataset–several Jester sets of different sizes are available–describes approximately 80,000 users making over 2.3 million ratings of 150 different jokes. The Jester team collected these ratings from April 1999 to May 2003 and November 2006 to March 2015. Each user and joke is represented by a unique integer identifier, and ratings range from -10 (worst) to +10 (best). Learn more about Jester [here](http://eigentaste.berkeley.edu/about.html).
+
+
 ## Data Processing
+
+### Joke Text
+
+The joke text is included in the *jokeText* file, so we will import this into our session. Let's create a few features from the joke text:
+
+* **JOKE_TYPE**: There are 2 general types of jokes - (1) Q&A (ex: Q. What's the difference between a man and a toilet?   A. A toilet doesn't follow you around after you use it.) and (2) story-line jokes (ex: A man visits the doctor. The doctor says "I have bad news for you.You have cancer and Alzheimer's disease".  The man replies "Well,thank God I don't have cancer!) We will classify Q&A jokes as $1$ and story-line jokes as $0$.
+* **JOKE_LENGTH**: The number of words in the joke. 
+* **EXCITED_COUNT**: The number of times an exclamation point is used in a given joke. 
+* **SENTIMENT_SCORE**: We will analyze the general sentiment of the joke using the 
+
+#### Joke Characteristics 
+```{r message=FALSE} 
+
+# https://www.cs.ox.ac.uk/files/244/mihalcea.cicling07.pdf
+jokeText <- data.frame(read_xls("jokeText.xls", col_names = FALSE))
+colnames(jokeText) <- c('JOKE_TEXT')
+
+# JOKE_TYPE, JOKE_LENGTH, EXCITED_COUNT columns
+jokeText <- jokeText %>%
+  mutate(JOKE_TYPE = ifelse(str_detect(JOKE_TEXT, 'Q:') == 'TRUE', 1, 0),
+         JOKE_LENGTH = str_count(JOKE_TEXT, '\\w+'),
+         EXCITED_COUNT = str_count(JOKE_TEXT, '!'))
+
+```
+
+#### Joke Sentiment
+To analyze the joke sentiment, we'll create a corpus for our joke text using the *tm* package. We'll remove whitespace, stopwords, and punctuation and also transform the text to lowercase. This will allow us to create a *DocumentTermMatrix* which identifies the counts of words in each joke.  
+  
+When we inspect the first few elements of the *DocumentTermMatrix*, we can that it is very sparse: 99% of the counts are 0. This means that there are not a lot of common words used in all jokes.
+```{r}
+# https://cran.r-project.org/web/packages/tm/vignettes/tm.pdf  
+# https://cran.r-project.org/web/packages/tidytext/vignettes/tidying_casting.html
+
+# create a corpus of words in the text
+jokeCorpus <- VCorpus(VectorSource(jokeText$JOKE_TEXT))
+
+# no whitespace, all lowercase, remove stopwords
+jokeCorpus <- tm_map(jokeCorpus, stripWhitespace)
+jokeCorpus <- tm_map(jokeCorpus, content_transformer(tolower))
+jokeCorpus <- tm_map(jokeCorpus, removeWords, stopwords("english"))
+jokeCorpus <- tm_map(jokeCorpus, removePunctuation)
+
+# create document-term matrix
+dtm <- DocumentTermMatrix(jokeCorpus)
+inspect(dtm)
+
+```
+
+We will transform the *DocumentTermMatrix* into a format that will allow us to analyze the sentiment of each word. We will use the the *get_sentiments()* function, which  looks at the words with a positive score from the lexicon of Bing Liu and collaborators.
+```{r}
+
+#  turn it into a one-term-per-document-per-row data frame
+dtm_td <- tidy(dtm)
+
+# sentiments per word
+joke_sentiments <- dtm_td %>%
+   inner_join(get_sentiments("bing"), by = c(term = "word"))
+
+```
+
+```{r message=FALSE, warning=FALSE}
+# # sentiments per doc
+# joke_sentiments %>%
+#   count(document, sentiment, wt = count) %>%
+#   spread(sentiment, n, fill = 0) %>%
+#   mutate(sentiment = positive - negative) %>%
+#   arrange(sentiment)
+
+```
+
+
 
 ## Recommenders
 
