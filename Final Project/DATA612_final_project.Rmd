@@ -38,7 +38,12 @@ Jester is a joke recommender system developed by the University of California, B
 
 ## Data Processing
 
-### Joke Text
+
+## Feature Engineering
+The first thing we will do is create features for our jokes. We will base our feature development on research by Rada Mihalcea and Stephen Pulman.
+
+
+### Joke Characteristics
 
 The joke text is included in the *jokeText* file, so we will import this into our session. Let's create a few features from the joke text:
 
@@ -47,12 +52,12 @@ The joke text is included in the *jokeText* file, so we will import this into ou
 * **EXCITED_COUNT**: The number of times an exclamation point is used in a given joke. 
 * **SENTIMENT_SCORE**: We will analyze the general sentiment of the joke using the 
 
-#### Joke Characteristics 
 ```{r message=FALSE} 
 
 # https://www.cs.ox.ac.uk/files/244/mihalcea.cicling07.pdf
 jokeText <- data.frame(read_xls("jokeText.xls", col_names = FALSE))
 colnames(jokeText) <- c('JOKE_TEXT')
+jokeText$JOKE_NUM <- 1:nrow(jokeText)
 
 # JOKE_TYPE, JOKE_LENGTH, EXCITED_COUNT columns
 jokeText <- jokeText %>%
@@ -62,7 +67,7 @@ jokeText <- jokeText %>%
 
 ```
 
-#### Joke Sentiment
+### Joke Sentiment
 To analyze the joke sentiment, we'll create a corpus for our joke text using the *tm* package. We'll remove whitespace, stopwords, and punctuation and also transform the text to lowercase. This will allow us to create a *DocumentTermMatrix* which identifies the counts of words in each joke.  
   
 When we inspect the first few elements of the *DocumentTermMatrix*, we can that it is very sparse: 99% of the counts are 0. This means that there are not a lot of common words used in all jokes.
@@ -86,27 +91,37 @@ inspect(dtm)
 ```
 
 We will transform the *DocumentTermMatrix* into a format that will allow us to analyze the sentiment of each word. We will use the the *get_sentiments()* function, which  looks at the words with a positive score from the lexicon of Bing Liu and collaborators.
-```{r}
+```{r message=FALSE}
 
 #  turn it into a one-term-per-document-per-row data frame
 dtm_td <- tidy(dtm)
 
 # sentiments per word
-joke_sentiments <- dtm_td %>%
-   inner_join(get_sentiments("bing"), by = c(term = "word"))
+jokeSentiments <- dtm_td %>%
+   inner_join(get_sentiments("bing"),by = c(term = "word"))
+
+# sentiments per doc
+sentPerDoc <- jokeSentiments %>%
+   count(document, sentiment, wt = count) %>%
+   spread(sentiment, n, fill = 0) %>%
+   mutate(sentiment = positive - negative) %>%
+   arrange(sentiment)
+
+# convert to a number
+sentPerDoc$document <- as.integer(sentPerDoc$document)
 
 ```
 
-```{r message=FALSE, warning=FALSE}
-# # sentiments per doc
-# joke_sentiments %>%
-#   count(document, sentiment, wt = count) %>%
-#   spread(sentiment, n, fill = 0) %>%
-#   mutate(sentiment = positive - negative) %>%
-#   arrange(sentiment)
+We can now join this to our original jokes dataset to get the positive, negative, and total sentiment scores of each joke. We will replace nulls in jokes where no positive or negative words were found with 0 (neutral).
+
+```{r}
+
+finalJokes <- left_join(jokeText,sentPerDoc, by = c('JOKE_NUM' = 'document'))
+finalJokes[is.na(finalJokes)] <- 0
+
+colnames(finalJokes)
 
 ```
-
 
 
 ## Recommenders
@@ -115,4 +130,6 @@ joke_sentiments <- dtm_td %>%
 
 ## Conclusion
 
-##Sources
+## Sources
+
+* Mihalcea, Rada, and Stephen Pulman. “Characterizing Humour: An Exploration of Features in Humorous Texts.” Computational Linguistics and Intelligent Text Processing Lecture Notes in Computer Science, 2007, pp. 337–347., doi:10.1007/978-3-540-70939-8_30.

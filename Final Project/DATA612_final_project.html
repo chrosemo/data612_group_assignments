@@ -452,12 +452,15 @@ summary {
 <ul>
 <li><a href="#project-goals">Project Goals</a></li>
 <li><a href="#about-the-dataset">About the Dataset</a></li>
-<li><a href="#data-processing">Data Processing</a><ul>
-<li><a href="#joke-text">Joke Text</a></li>
+<li><a href="#data-processing">Data Processing</a></li>
+<li><a href="#feature-engineering">Feature Engineering</a><ul>
+<li><a href="#joke-characteristics">Joke Characteristics</a></li>
+<li><a href="#joke-sentiment">Joke Sentiment</a></li>
 </ul></li>
 <li><a href="#recommenders">Recommenders</a></li>
 <li><a href="#evaluation-and-selection">Evaluation and Selection</a></li>
 <li><a href="#conclusion">Conclusion</a></li>
+<li><a href="#sources">Sources</a></li>
 </ul>
 </div>
 
@@ -471,8 +474,12 @@ summary {
 </div>
 <div id="data-processing" class="section level2">
 <h2>Data Processing</h2>
-<div id="joke-text" class="section level3">
-<h3>Joke Text</h3>
+</div>
+<div id="feature-engineering" class="section level2">
+<h2>Feature Engineering</h2>
+<p>The first thing we will do is create features for our jokes. We will base our feature development on research by Rada Mihalcea and Stephen Pulman.</p>
+<div id="joke-characteristics" class="section level3">
+<h3>Joke Characteristics</h3>
 <p>The joke text is included in the <em>jokeText</em> file, so we will import this into our session. Let’s create a few features from the joke text:</p>
 <ul>
 <li><strong>JOKE_TYPE</strong>: There are 2 general types of jokes - (1) Q&amp;A (ex: Q. What’s the difference between a man and a toilet? A. A toilet doesn’t follow you around after you use it.) and (2) story-line jokes (ex: A man visits the doctor. The doctor says “I have bad news for you.You have cancer and Alzheimer’s disease”. The man replies &quot;Well,thank God I don’t have cancer!) We will classify Q&amp;A jokes as <span class="math inline">\(1\)</span> and story-line jokes as <span class="math inline">\(0\)</span>.</li>
@@ -480,20 +487,19 @@ summary {
 <li><strong>EXCITED_COUNT</strong>: The number of times an exclamation point is used in a given joke.</li>
 <li><strong>SENTIMENT_SCORE</strong>: We will analyze the general sentiment of the joke using the</li>
 </ul>
-<div id="joke-characteristics" class="section level4">
-<h4>Joke Characteristics</h4>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" title="1"><span class="co"># https://www.cs.ox.ac.uk/files/244/mihalcea.cicling07.pdf</span></a>
 <a class="sourceLine" id="cb1-2" title="2">jokeText &lt;-<span class="st"> </span><span class="kw">data.frame</span>(<span class="kw">read_xls</span>(<span class="st">&quot;jokeText.xls&quot;</span>, <span class="dt">col_names =</span> <span class="ot">FALSE</span>))</a>
 <a class="sourceLine" id="cb1-3" title="3"><span class="kw">colnames</span>(jokeText) &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&#39;JOKE_TEXT&#39;</span>)</a>
-<a class="sourceLine" id="cb1-4" title="4"></a>
-<a class="sourceLine" id="cb1-5" title="5"><span class="co"># JOKE_TYPE, JOKE_LENGTH, EXCITED_COUNT columns</span></a>
-<a class="sourceLine" id="cb1-6" title="6">jokeText &lt;-<span class="st"> </span>jokeText <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb1-7" title="7"><span class="st">  </span><span class="kw">mutate</span>(<span class="dt">JOKE_TYPE =</span> <span class="kw">ifelse</span>(<span class="kw">str_detect</span>(JOKE_TEXT, <span class="st">&#39;Q:&#39;</span>) <span class="op">==</span><span class="st"> &#39;TRUE&#39;</span>, <span class="dv">1</span>, <span class="dv">0</span>),</a>
-<a class="sourceLine" id="cb1-8" title="8">         <span class="dt">JOKE_LENGTH =</span> <span class="kw">str_count</span>(JOKE_TEXT, <span class="st">&#39;</span><span class="ch">\\</span><span class="st">w+&#39;</span>),</a>
-<a class="sourceLine" id="cb1-9" title="9">         <span class="dt">EXCITED_COUNT =</span> <span class="kw">str_count</span>(JOKE_TEXT, <span class="st">&#39;!&#39;</span>))</a></code></pre></div>
+<a class="sourceLine" id="cb1-4" title="4">jokeText<span class="op">$</span>JOKE_NUM &lt;-<span class="st"> </span><span class="dv">1</span><span class="op">:</span><span class="kw">nrow</span>(jokeText)</a>
+<a class="sourceLine" id="cb1-5" title="5"></a>
+<a class="sourceLine" id="cb1-6" title="6"><span class="co"># JOKE_TYPE, JOKE_LENGTH, EXCITED_COUNT columns</span></a>
+<a class="sourceLine" id="cb1-7" title="7">jokeText &lt;-<span class="st"> </span>jokeText <span class="op">%&gt;%</span></a>
+<a class="sourceLine" id="cb1-8" title="8"><span class="st">  </span><span class="kw">mutate</span>(<span class="dt">JOKE_TYPE =</span> <span class="kw">ifelse</span>(<span class="kw">str_detect</span>(JOKE_TEXT, <span class="st">&#39;Q:&#39;</span>) <span class="op">==</span><span class="st"> &#39;TRUE&#39;</span>, <span class="dv">1</span>, <span class="dv">0</span>),</a>
+<a class="sourceLine" id="cb1-9" title="9">         <span class="dt">JOKE_LENGTH =</span> <span class="kw">str_count</span>(JOKE_TEXT, <span class="st">&#39;</span><span class="ch">\\</span><span class="st">w+&#39;</span>),</a>
+<a class="sourceLine" id="cb1-10" title="10">         <span class="dt">EXCITED_COUNT =</span> <span class="kw">str_count</span>(JOKE_TEXT, <span class="st">&#39;!&#39;</span>))</a></code></pre></div>
 </div>
-<div id="joke-sentiment" class="section level4">
-<h4>Joke Sentiment</h4>
+<div id="joke-sentiment" class="section level3">
+<h3>Joke Sentiment</h3>
 <p>To analyze the joke sentiment, we’ll create a corpus for our joke text using the <em>tm</em> package. We’ll remove whitespace, stopwords, and punctuation and also transform the text to lowercase. This will allow us to create a <em>DocumentTermMatrix</em> which identifies the counts of words in each joke.</p>
 <p>When we inspect the first few elements of the <em>DocumentTermMatrix</em>, we can that it is very sparse: 99% of the counts are 0. This means that there are not a lot of common words used in all jokes.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" title="1"><span class="co"># https://cran.r-project.org/web/packages/tm/vignettes/tm.pdf  </span></a>
@@ -534,15 +540,25 @@ summary {
 <a class="sourceLine" id="cb4-2" title="2">dtm_td &lt;-<span class="st"> </span><span class="kw">tidy</span>(dtm)</a>
 <a class="sourceLine" id="cb4-3" title="3"></a>
 <a class="sourceLine" id="cb4-4" title="4"><span class="co"># sentiments per word</span></a>
-<a class="sourceLine" id="cb4-5" title="5">joke_sentiments &lt;-<span class="st"> </span>dtm_td <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb4-6" title="6"><span class="st">   </span><span class="kw">inner_join</span>(<span class="kw">get_sentiments</span>(<span class="st">&quot;bing&quot;</span>), <span class="dt">by =</span> <span class="kw">c</span>(<span class="dt">term =</span> <span class="st">&quot;word&quot;</span>))</a></code></pre></div>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" title="1"><span class="co"># # sentiments per doc</span></a>
-<a class="sourceLine" id="cb5-2" title="2"><span class="co"># joke_sentiments %&gt;%</span></a>
-<a class="sourceLine" id="cb5-3" title="3"><span class="co">#   count(document, sentiment, wt = count) %&gt;%</span></a>
-<a class="sourceLine" id="cb5-4" title="4"><span class="co">#   spread(sentiment, n, fill = 0) %&gt;%</span></a>
-<a class="sourceLine" id="cb5-5" title="5"><span class="co">#   mutate(sentiment = positive - negative) %&gt;%</span></a>
-<a class="sourceLine" id="cb5-6" title="6"><span class="co">#   arrange(sentiment)</span></a></code></pre></div>
-</div>
+<a class="sourceLine" id="cb4-5" title="5">jokeSentiments &lt;-<span class="st"> </span>dtm_td <span class="op">%&gt;%</span></a>
+<a class="sourceLine" id="cb4-6" title="6"><span class="st">   </span><span class="kw">inner_join</span>(<span class="kw">get_sentiments</span>(<span class="st">&quot;bing&quot;</span>),<span class="dt">by =</span> <span class="kw">c</span>(<span class="dt">term =</span> <span class="st">&quot;word&quot;</span>))</a>
+<a class="sourceLine" id="cb4-7" title="7"></a>
+<a class="sourceLine" id="cb4-8" title="8"><span class="co"># sentiments per doc</span></a>
+<a class="sourceLine" id="cb4-9" title="9">sentPerDoc &lt;-<span class="st"> </span>jokeSentiments <span class="op">%&gt;%</span></a>
+<a class="sourceLine" id="cb4-10" title="10"><span class="st">   </span><span class="kw">count</span>(document, sentiment, <span class="dt">wt =</span> count) <span class="op">%&gt;%</span></a>
+<a class="sourceLine" id="cb4-11" title="11"><span class="st">   </span><span class="kw">spread</span>(sentiment, n, <span class="dt">fill =</span> <span class="dv">0</span>) <span class="op">%&gt;%</span></a>
+<a class="sourceLine" id="cb4-12" title="12"><span class="st">   </span><span class="kw">mutate</span>(<span class="dt">sentiment =</span> positive <span class="op">-</span><span class="st"> </span>negative) <span class="op">%&gt;%</span></a>
+<a class="sourceLine" id="cb4-13" title="13"><span class="st">   </span><span class="kw">arrange</span>(sentiment)</a>
+<a class="sourceLine" id="cb4-14" title="14"></a>
+<a class="sourceLine" id="cb4-15" title="15"><span class="co"># convert to a number</span></a>
+<a class="sourceLine" id="cb4-16" title="16">sentPerDoc<span class="op">$</span>document &lt;-<span class="st"> </span><span class="kw">as.integer</span>(sentPerDoc<span class="op">$</span>document)</a></code></pre></div>
+<p>We can now join this to our original jokes dataset to get the positive, negative, and total sentiment scores of each joke. We will replace nulls in jokes where no positive or negative words were found with 0 (neutral).</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" title="1">finalJokes &lt;-<span class="st"> </span><span class="kw">left_join</span>(jokeText,sentPerDoc, <span class="dt">by =</span> <span class="kw">c</span>(<span class="st">&#39;JOKE_NUM&#39;</span> =<span class="st"> &#39;document&#39;</span>))</a>
+<a class="sourceLine" id="cb5-2" title="2">finalJokes[<span class="kw">is.na</span>(finalJokes)] &lt;-<span class="st"> </span><span class="dv">0</span></a>
+<a class="sourceLine" id="cb5-3" title="3"></a>
+<a class="sourceLine" id="cb5-4" title="4"><span class="kw">colnames</span>(finalJokes)</a></code></pre></div>
+<pre><code>## [1] &quot;JOKE_TEXT&quot;     &quot;JOKE_NUM&quot;      &quot;JOKE_TYPE&quot;     &quot;JOKE_LENGTH&quot;  
+## [5] &quot;EXCITED_COUNT&quot; &quot;negative&quot;      &quot;positive&quot;      &quot;sentiment&quot;</code></pre>
 </div>
 </div>
 <div id="recommenders" class="section level2">
@@ -553,7 +569,12 @@ summary {
 </div>
 <div id="conclusion" class="section level2">
 <h2>Conclusion</h2>
-<p>##Sources</p>
+</div>
+<div id="sources" class="section level2">
+<h2>Sources</h2>
+<ul>
+<li>Mihalcea, Rada, and Stephen Pulman. “Characterizing Humour: An Exploration of Features in Humorous Texts.” Computational Linguistics and Intelligent Text Processing Lecture Notes in Computer Science, 2007, pp. 337–347., <a href="doi:10.1007/978-3-540-70939-8_30" class="uri">doi:10.1007/978-3-540-70939-8_30</a>.</li>
+</ul>
 </div>
 
 
