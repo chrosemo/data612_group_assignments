@@ -29,14 +29,52 @@ library(tidytext)
 # spark_install()
 ```
 
-## Project Goals
-We will be using Spark, via R and sparklyr, to build a recommender system that predicts Jester users’ joke ratings. Spark offers the distributed platform necessary to work with the larger Jester dataset, which would otherwise prove too large for our group’s local machines to handle. Our intended system will draw on our previous assignments and select from a comparison of recommenders of different types. We expect to use matrix factorization in pre-processing, and we will employ various evaluation methods to select our final model.
+## Project Goals ****UPDATE TO REFLECT SHIFT TO HYBRID****
+We will be using Spark, via R and *sparklyr* to build a recommender system that predicts Jester users’ joke ratings. Spark offers the distributed platform necessary to work with the larger Jester dataset, which would otherwise prove too large for our group’s local machines to handle. Our intended system will draw on our previous assignments and select from a comparison of recommenders of different types. We expect to use matrix factorization in pre-processing, and we will employ various evaluation methods to select our final model.
 
-## About the Dataset
-Jester is a joke recommender system developed by the University of California, Berkeley Laboratory of Automation Science and Engineering. The Jester dataset contains millions of joke ratings made by users of the recommender system, which learns from new users. Our chosen dataset–several Jester sets of different sizes are available–describes approximately 80,000 users making over 2.3 million ratings of 150 different jokes. The Jester team collected these ratings from April 1999 to May 2003 and November 2006 to March 2015. Each user and joke is represented by a unique integer identifier, and ratings range from -10 (worst) to +10 (best). Learn more about Jester [here](http://eigentaste.berkeley.edu/about.html).
+## About the Dataset ****APPEND TO REFLECT SHIFT TO HYBRID****
+Jester is a joke recommender system developed by the University of California, Berkeley Laboratory of Automation Science and Engineering. The Jester dataset contains millions of joke ratings made by users of the recommender system, which learns from new users. Our chosen dataset – several Jester sets of different sizes are available – initially describes approximately 80,000 users making over 2.3 million ratings of 150 different jokes. The Jester team collected these ratings from April 1999 to May 2003 and November 2006 to March 2015. Each user and joke is represented by a unique integer identifier, and ratings range from -10 (worst) to +10 (best). Learn more about Jester [here](http://eigentaste.berkeley.edu/about.html).
 
 
 ## Data Processing
+
+### Joke Ratings
+
+```{r}
+# Downloading ratings data to tempfile
+dl <- tempfile()
+download.file("http://eigentaste.berkeley.edu/dataset/JesterDataset3.zip", dl)
+```
+```{r}
+# Unzipping then reading into a tibble
+con <- unzip(dl, "FINAL jester 2006-15.xls")
+working <- read_xls(con, col_names = FALSE)
+```
+```{r}
+# Removing count column
+ratings_working <- working[-1]
+
+# Adding column and row names
+names(ratings_working) <- 1:dim(ratings_working)[2]
+row.names(ratings_working) <- 1:nrow(ratings_working)
+
+# Removing retired jokes (columns)
+retired <- c("1","2","3","4","5","6","9","10","11","12","14","20","27","31","43","51","52","61","73","80","100","116")  # per Jester website -- jokes removed and thus not rated
+ratings_working[, retired] <- list(NULL)
+```
+```{r}
+# Replacing "99" with NA
+ratings_working[ratings_working == 99] <- NA
+
+# Creating binary matrix where positive ratings (>=1) are 1 and all other ratings or NA are 0
+ratings_binary <- as.matrix(ratings_working)
+ratings_binary[is.na(ratings_binary) | ratings_binary < 1] <- 0 
+ratings_binary[ratings_binary != 0] <- 1
+```
+```{r}
+# Creating binary rating matrix
+ratings <- as(ratings_binary, "binaryRatingMatrix")
+```
 
 ### Joke Text
 
@@ -111,8 +149,26 @@ joke_sentiments <- dtm_td %>%
 
 ## Recommenders
 
+### IBCF
+
+```{r}
+# Splitting into train/test
+which_train <- sample(x = c(TRUE, FALSE), size = nrow(ratings), replace = TRUE, prob = c(0.8, 0.2))
+ratings_train <- ratings[which_train,]
+ratings_test <- ratings[!which_train,]
+```
+```{r}
+# Training IBCF recommender using Jaccard for distance given binary ratings
+ratings_ibcf <- Recommender(data = recc_train, method = "IBCF", parameter = list(method = "Jaccard"))
+```
+```{r}
+# Defining a ratings similarity matrix
+ratings_dist <- as(ratings_ibcf@model$sim, "matrix")
+```
+
 ## Evaluation and Selection
 
 ## Conclusion
 
-##Sources
+## Sources
+***ADD COURSE TEXT***
