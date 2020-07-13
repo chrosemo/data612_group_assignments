@@ -20,6 +20,7 @@ library(tidyverse)
 library(dplyr)
 library(readxl)
 library(sparklyr)
+library(recommenderlab)
 
 #library(stringr)
 library(tm)
@@ -34,23 +35,27 @@ library(tidytext)
 We will build a recommender system that predicts Jester users’ joke ratings. We will use a cloud platform, Databricks Community Edition, for pocessing since the intended dataset to be used is large. Our intended recommender system  will be based on a  hybrid of the content-based approach and IBCF model. Text analysis will be performed on the raw 'jokes text' in order to elicit features that will be used in the design and development of the content based recommender.These features are described in the Joke Text section below. Additionally, a binarised matrix will be  created from jokes ratings from which a IBCF recommender will be developed. We will employ various evaluation methods to select our final model. ****TBC*** "  Are we doing monolithic hybrid? where two approaches are ingtegrated into one algorithm - for example in this case the algorithm takes into account ratings AND item description(its sentiment score)
 
 ## About the Dataset ****APPEND TO REFLECT SHIFT TO HYBRID****
-The Jester datset 3 will be used in this project. Jester is a joke recommender system developed by the University of California, Berkeley Laboratory of Automation Science and Engineering. The Jester dataset contains millions of joke ratings made by users of the recommender system, which learns from new users. Our chosen dataset – several Jester sets of different sizes are available – initially describes approximately 80,000 users making over 2.3 million ratings of 150 different jokes. The Jester team collected these ratings from April 1999 to May 2003 and November 2006 to March 2015. Each user and joke is represented by a unique integer identifier, and ratings range from -10 (worst) to +10 (best). (Learn more about Jester [here](http://eigentaste.berkeley.edu/about.html).) The joke text included in the *jokeText* file will also be used so as to facilitate features engineering.
+The Jester datset 3 will be used in this project. Jester is a joke recommender system developed by the University of California, Berkeley Laboratory of Automation Science and Engineering. The Jester dataset contains millions of joke ratings made by users of the recommender system, which learns from new users. Our chosen dataset (several Jester sets of different sizes are available) initially describes almost 55,000 users making over 1.8 million ratings of 150 different jokes. The Jester team collected these ratings from April 1999 to May 2003 and November 2006 to March 2015. Ratings are real values ranging from -10.00 to +10.00 (the value "99" corresponds to "null" = "not rated"). Each row in the dataset represents a different user, and the first column represents the total number of jokes the individual has rated. The remaining 100 columns give the ratings for each joke. (Learn more about Jester [here](http://eigentaste.berkeley.edu/about.html).) The joke text included in the *jokeText* file will also be used so as to facilitate features engineering.
 
 
-## Binarising Joke Ratings
+## Data
 
+### Read and prepare data
+
+First, we will load in the jester data set. We can see from this that we have $54,905$ users and $150$ jokes (plus one column for the rated joke count).
 ```{r}
 # Downloading ratings data to tempfile
 dl <- tempfile()
 download.file("http://eigentaste.berkeley.edu/dataset/JesterDataset3.zip", dl)
-```
 
-```{r}
 # Unzipping then reading into a tibble
 con <- unzip(dl, "FINAL jester 2006-15.xls")
-working <- read_xls(con, col_names = FALSE)
+working <- data.frame(read_xls(con, col_names = FALSE))
+
+dim(working)
 ```
 
+We'll start by removing the count column and retired jokes (jokes that weren't rated). After this cleansing, we're left with a total of $128$ jokes. 
 ```{r}
 # Removing count column
 ratings_working <- working[-1]
@@ -62,8 +67,11 @@ row.names(ratings_working) <- 1:nrow(ratings_working)
 # Removing retired jokes (columns)
 retired <- c("1","2","3","4","5","6","9","10","11","12","14","20","27","31","43","51","52","61","73","80","100","116")  # per Jester website -- jokes removed and thus not rated
 ratings_working[, retired] <- list(NULL)
+
+dim(ratings_working)
 ```
 
+The raw data represents non-rated jokes as the number 99, so we will replace these values with nulls. We'll also create a binary ratings matrix that can be used for our recommender system. A $0$ will represent a negative rating or a joke that hasn't been rated and a $1$ will represent a positively rated joke. 
 ```{r}
 # Replacing "99" with NA
 ratings_working[ratings_working == 99] <- NA
@@ -71,12 +79,17 @@ ratings_working[ratings_working == 99] <- NA
 # Creating binary matrix where positive ratings (> 0) are 1 and all other ratings or NA are 0
 ratings_binary <- as.matrix(ratings_working)
 ratings_binary <- ifelse(is.na(ratings_binary) | ratings_binary <= 0, 0, 1)
-```
 
-```{r}
 # Creating binary rating matrix
 ratings <- as(ratings_binary, "binaryRatingMatrix")
+```
+
+### Exploratory data analysis
+
+```{r}
+
 image(ratings[1:50, 1:50], main = "Viz of Binary Rating Matrix")
+
 ```
 
 ## Feature Engineering to support content-based approach
@@ -127,14 +140,14 @@ jokeCorpus <- tm_map(jokeCorpus, removePunctuation)
 
 # create document-term matrix
 dtm <- DocumentTermMatrix(jokeCorpus)
-inspect(dtm)
+tm::inspect(dtm)
 
 ```
 
 We will transform the *DocumentTermMatrix* into a format that will allow us to analyze the sentiment of each word. We will use the the *get_sentiments()* function, which  looks at the words with a positive score from the lexicon of Bing Liu and collaborators.
 ```{r message=FALSE}
 
-#  turn it into a one-term-per-document-per-row data frame
+# turn it into a one-term-per-document-per-row data frame
 dtm_td <- tidy(dtm)
 
 # sentiments per word
