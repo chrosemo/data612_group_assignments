@@ -30,7 +30,7 @@ library(tidytext)
 ```
 
 ## Project Goals ****UPDATE TO REFLECT SHIFT TO HYBRID****
-We will be using Spark, via R and *sparklyr* to build a recommender system that predicts Jester users’ joke ratings. Spark offers the distributed platform necessary to work with the larger Jester dataset, which would otherwise prove too large for our group’s local machines to handle. Our intended system will draw on our previous assignments and select from a comparison of recommenders of different types. We expect to use matrix factorization in pre-processing, and we will employ various evaluation methods to select our final model.
+We will build a recommender system that predicts Jester users’ joke ratings. We will use a cloud platform, Databricks Community Edition, for pocessing since the intended dataset to be used is large. Our intended recommender system  will be based on a  hybrid of the content based approach and IBCF model. Text analysis will be performed on the raw 'jokes text' in order to elicit features that will be used in the design and development of the content based recommender.These features are described in the Joke Text section below. Additionally, a binarised matrix will be  created from jokes ratings from which a IBCF recommender will be developed. We will employ various evaluation methods to select our final model. ****TBC***
 
 ## About the Dataset ****APPEND TO REFLECT SHIFT TO HYBRID****
 Jester is a joke recommender system developed by the University of California, Berkeley Laboratory of Automation Science and Engineering. The Jester dataset contains millions of joke ratings made by users of the recommender system, which learns from new users. Our chosen dataset – several Jester sets of different sizes are available – initially describes approximately 80,000 users making over 2.3 million ratings of 150 different jokes. The Jester team collected these ratings from April 1999 to May 2003 and November 2006 to March 2015. Each user and joke is represented by a unique integer identifier, and ratings range from -10 (worst) to +10 (best). Learn more about Jester [here](http://eigentaste.berkeley.edu/about.html).
@@ -83,6 +83,7 @@ ratings_binary <- ifelse(is.na(ratings_binary) | ratings_binary <= 0, 0, 1)
 ```{r}
 # Creating binary rating matrix
 ratings <- as(ratings_binary, "binaryRatingMatrix")
+image(ratings[1:50, 1:50], main = "Viz of Binary Rating Matrix")
 ```
 
 ### Joke Text
@@ -179,6 +180,7 @@ ratings_test <- ratings[!which_train,]
 ```{r}
 # Training IBCF recommender using Jaccard for distance given binary ratings
 ratings_ibcf <- Recommender(data = recc_train, method = "IBCF", parameter = list(method = "Jaccard"))
+model_details <- getModel(recc_model)
 ```
 ```{r}
 # Defining a ratings similarity matrix
@@ -193,5 +195,6 @@ ratings_dist <- as(ratings_ibcf@model$sim, "matrix")
 
 * Mihalcea, Rada, and Stephen Pulman. “Characterizing Humour: An Exploration of Features in Humorous Texts.” Computational Linguistics and Intelligent Text Processing Lecture Notes in Computer Science, 2007, pp. 337–347., doi:10.1007/978-3-540-70939-8_30.
 
+* Usuelli, M., & Gorakala, S. K. (2015). Building a Recommendation System with R. Packt Publishing Limited.
 ***ADD COURSE TEXT***
 
