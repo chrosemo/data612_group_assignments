@@ -75,10 +75,9 @@ ratings_working[, retired] <- list(NULL)
 # Replacing "99" with NA
 ratings_working[ratings_working == 99] <- NA
 
-# Creating binary matrix where positive ratings (>=1) are 1 and all other ratings or NA are 0
+# Creating binary matrix where positive ratings (> 0) are 1 and all other ratings or NA are 0
 ratings_binary <- as.matrix(ratings_working)
-ratings_binary[is.na(ratings_binary) | ratings_binary < 1] <- 0 
-ratings_binary[ratings_binary != 0] <- 1
+ratings_binary <- ifelse(ratings_binary > 0, 1, 0) 
 ```
 
 ```{r}
