@@ -135,21 +135,30 @@ The first thing we will do is create features for our jokes. We will base our fe
 
 ### Joke Characteristics
 
-### Joke Text
+The joke text is included in the *jokeText* file, so we will import this into our session. Since we subset our original jokes, we'll eliminate any jokes that should not be included in the feature set. 
 
-The joke text is included in the *jokeText* file, so we will import this into our session. Let's create a few features from the joke text:
+```{r message=FALSE}
 
-* **JOKE_TYPE**: There are 2 general types of jokes - (1) Q&A (ex: Q. What's the difference between a man and a toilet?   A. A toilet doesn't follow you around after you use it.) and (2) story-line jokes (ex: A man visits the doctor. The doctor says "I have bad news for you.You have cancer and Alzheimer's disease".  The man replies "Well,thank God I don't have cancer!) We will classify Q&A jokes as $1$ and story-line jokes as $0$.
-* **JOKE_LENGTH**: The number of words in the joke. 
-* **EXCITED_COUNT**: The number of times an exclamation point is used in a given joke. 
-* **SENTIMENT_SCORE**: We will analyze the general sentiment of the joke using the the lexicon of Bing Liu and collaborators.
-
-```{r message=FALSE} 
+jokes <- data.frame(as.integer(colnames(ratings_working)))
+colnames(jokes) <- c('JOKE_NUM')
 
 # https://www.cs.ox.ac.uk/files/244/mihalcea.cicling07.pdf
 jokeText <- data.frame(read_xls("jokeText.xls", col_names = FALSE))
 colnames(jokeText) <- c('JOKE_TEXT')
 jokeText$JOKE_NUM <- 1:nrow(jokeText)
+
+jokeText <- inner_join(jokeText, jokes, by='JOKE_NUM')
+
+```
+
+Let's create a few features from the joke text:
+
+* **JOKE_TYPE**: There are 2 general types of jokes - (1) Q&A (ex: Q. What's the difference between a man and a toilet?   A. A toilet doesn't follow you around after you use it.) and (2) story-line jokes (ex: A man visits the doctor. The doctor says "I have bad news for you.You have cancer and Alzheimer's disease".  The man replies "Well,thank God I don't have cancer!) We will classify Q&A jokes as $1$ and story-line jokes as $0$.
+* **JOKE_LENGTH**: The number of words in the joke. 
+* **EXCITED_COUNT**: The number of times an exclamation point is used in a given joke. 
+* **SENTIMENT FEATURES**: We will analyze the general sentiment of the joke using the the lexicon of Bing Liu and collaborators. We'll record the positive scores, negative scores, total sentiment, and categorize the sentiment as 1 (positive) or 0 (neutral, or negative).
+
+```{r message=FALSE} 
 
 # JOKE_TYPE, JOKE_LENGTH, EXCITED_COUNT columns
 jokeText <- jokeText %>%
@@ -162,7 +171,7 @@ jokeText <- jokeText %>%
 ### Joke Sentiment
 To analyze the joke sentiment, we'll create a corpus for our joke text using the *tm* package. We'll remove whitespace, stopwords, and punctuation and also transform the text to lowercase. This will allow us to create a *DocumentTermMatrix* which identifies the counts of words in each joke.  
   
-When we inspect the first few elements of the *DocumentTermMatrix*, we can that it is very sparse: 99% of the counts are 0. This means that there are not a lot of common words used in all jokes.
+When we inspect the first few elements of the *DocumentTermMatrix*, we can see that it is very sparse: 99% of the counts are 0. This means that there are not a lot of common words used in all jokes.
 ```{r}
 # https://cran.r-project.org/web/packages/tm/vignettes/tm.pdf  
 # https://cran.r-project.org/web/packages/tidytext/vignettes/tidying_casting.html
@@ -196,15 +205,19 @@ jokeSentiments <- dtm_td %>%
 sentPerDoc <- jokeSentiments %>%
    count(document, sentiment, wt = count) %>%
    spread(sentiment, n, fill = 0) %>%
-   mutate(sentiment = positive - negative) %>%
-   arrange(sentiment)
+   mutate(SENTIMENT_SCORE = positive - negative,
+          POSITIVE_SCORE = positive,
+          NEGATIVE_SCORE = negative,
+          SCORE_CATEGORY = ifelse(SENTIMENT_SCORE > 0, 1, 0)) %>%
+   select(document, SENTIMENT_SCORE, POSITIVE_SCORE, NEGATIVE_SCORE, SCORE_CATEGORY) %>%
+   arrange(SENTIMENT_SCORE)
 
 # convert to a number
 sentPerDoc$document <- as.integer(sentPerDoc$document)
 
 ```
 
-We can now join this to our original jokes dataset to get the positive, negative, and total sentiment scores of each joke. We will replace nulls in jokes where no positive or negative words were found with 0 (neutral). We can confirm that the final dataset includes the original features with the sentiment scores. 
+We can now join this to our original jokes dataset to get the positive, negative, and total sentiment scores of each joke. We will replace nulls in jokes where no positive or negative words were found with 0 (neutral). We can confirm that the final dataset includes the original features and sentiment counts. 
 
 ```{r}
 
@@ -215,58 +228,125 @@ colnames(finalJokes)
 
 ```
 
-### Sentiment Distance Scores
-Finally, we'll create a score *category* from the sentiment scores. We'll define 'positive' as anything with a score > 0 and all others as 'non-positive'. We'll then create a matrix of sentiment distance scores - 1 will represent 
+### Feature Similarity Matrix
+Finally, we can create a similarity matrix for our data based on all of the features we've defined. The higher the score, the more similar the two jokes are. 
 ```{r}
 # Binarizing sentiment
-finalJokes$scoreCategory <- ifelse(finalJokes$sentiment > 0, "positive", "non-positive")
+#finalJokes$scoreCategory <- ifelse(finalJokes$sentiment > 0, "positive", "non-positive")
 
 # Calculating distance using binary sentiment score
-finalJokesTable <- data.table::as.data.table(finalJokes)
-dist_score <- finalJokesTable[, 1 - dist(finalJokesTable$scoreCategory == "positive")]
+#finalJokesTable <- data.table::as.data.table(finalJokes)
+#dist_score <- finalJokesTable[, 1 - dist(finalJokesTable$scoreCategory == "positive")]
 
 # Converting distance object into matrix
-dist_score <- as.matrix(dist_score)
-dim(dist_score)  
+#dist_score <- as.matrix(dist_score)
+#dim(dist_score)  
+
+jokeFeatures <- finalJokes %>% 
+   select(JOKE_TYPE, JOKE_LENGTH, EXCITED_COUNT, SENTIMENT_SCORE, POSITIVE_SCORE, NEGATIVE_SCORE, SCORE_CATEGORY) 
+
+#method = c("cosine", "correlation",  "jaccard", "ejaccard", "dice", "edice", #"hamman","simple matching",  "faith")
+
+jokeSims <- as.matrix(simil(jokeFeatures))
+
+paste0('Min similarity score: ',min(jokeSims, na.rm=TRUE),' | Max similarity score: ', max(jokeSims, na.rm=TRUE))
+
 ```
 
+We can also take a look the distribution of similarity scores and see that it is right-skewed, meaning many of the jokes are similar to one another:
+
+```{r}
+
+hist(jokeSims,
+     main = 'Distribution of similarity scores',
+     xlab = 'Similarty Score',
+     ylab = 'Number of Scores')
+
+```
 
 ## Recommenders
 Our final, hybrid model combines (1) item-based collaborative filtering with (2) the constructed features from the joke text. Each piece will be built out separately and later combined to create the final prediction. The process for building this model is based on Chapter 5 of the course text. 
 
 
 ### Train-Test Split
-First, we will split the *binaryRatingMatrix* into training and test sets. The training set will be used to build the model and the test set will be used to calculate the accuracy of predictions. 
+First, we will split the ratings matrix into training and test sets. The training set will be used to build the model and the test set will be used to calculate the accuracy of predictions. 
 
 ```{r}
 # Splitting into train/test
 which_train <- sample(x = c(TRUE, FALSE), 
-                      size = nrow(ratings), 
+                      size = nrow(finalRatings), #ratings
                       replace = TRUE, 
                       prob = c(0.8, 0.2))
 
-ratings_train <- ratings[which_train,]
-ratings_test <- ratings[!which_train,]
+ratings_train <- finalRatings[which_train,]
+ratings_test <- finalRatings[!which_train,]
 ```
 
 ### IBCF
 
-Now we can build our initial item-based recommender. We will use Jaccard for distance given binary ratings. 
+Now we can build our initial item-based recommender. We'll define the following: 
+
+* **Training Percent:** The percent of the data that should be used in training. The remaining data will be used for testing.
+* **Items To Keep:** The total number of items that will be used to generate the recommendations. The remaining items will be used to test the model accuracy. We'll identify the min number of jokes that an individual has rated and use a few less than that. 
+* **Rating Threshold:** The threshold to be used for positive ratings. Since our data is on a scale of -10 to 10, we will use 1 as the threshold for a good joke. 
 
 ```{r}
-# Training IBCF recommender using Jaccard for distance given binary ratings
-ratings_ibcf <- Recommender(data = ratings_train, 
-                            method = "IBCF", 
-                            parameter = list(method = "Jaccard"))
+trainPct <- 0.8
+toKeep <- min(rowCounts(finalRatings)) - 3
+ratingThreshold <- 1
+nFold <- 3
 
-model_details <- getModel(ratings_ibcf)
+# define evaluation scheme
+evalScheme <- evaluationScheme(finalRatings, 
+                               method = "split", 
+                               given = toKeep, 
+                               goodRating = ratingThreshold)
+
+# models to compare
+evalModels <- list(
+ IBCF_cos = list(name = "IBCF", param = list(method =
+ "cosine")),
+ IBCF_pea = list(name = "IBCF", param = list(method =
+ "pearson")),
+ IBCF_jac = list(name = "IBCF", param = list(method =
+ "jaccard")) 
+)
+
+# number of recommendations
+nRecs <- c(1, seq(3, 20, 1))
+finalResults <- evaluate(x = evalScheme, method = evalModels, n = nRecs)
 ```
 
-We'll define a similarity matrix for the jokes, which will give us an idea of how similar jokes are to each other. This matrix is based on the rated jokes -- the more users that rate the jokes positively together, the more similar they are. We can visualise this matrix as well -- the darker colored squares represent jokes that are similar. 
+
+We can see from the plot of the final results that the IBCF model with the pearson similarity works best. 
+```{r}
+plot(finalResults, annotate = 1, legend = "topleft")
+title("ROC curve")
+```
+
+```{r}
+# IBCF Model
+ibcfRec <- Recommender(getData(evalScheme, "train"), 'IBCF', parameter = list(method = 'pearson', normalize = 'center'))
+
+ibcfPred <- predict(ibcfRec,getData(evalScheme,'known'), type = 'ratings')
+ibcfAcc <- calcPredictionAccuracy(ibcfPred, getData(evalScheme, "unknown"))
+
+#################################################
+# Training IBCF recommender using Jaccard for distance given binary ratings
+# ratings_ibcf <- Recommender(data = ratings_train, 
+#                             method = "IBCF", 
+#                             parameter = list(method = "Jaccard"))
+# 
+# model_details <- getModel(ratings_ibcf)
+
+
+```
+
+We'll define a similarity matrix for the jokes, which will give us an idea of how similar jokes are to each other. This matrix is based on the rated jokes -- the more users that rate the jokes positively together, the more similar they are. We can visualize this matrix as well -- the darker colored squares represent jokes that are similar. 
 
 ```{r}
 # Defining a similarity matrix object
-ratings_dist <- as(ratings_ibcf@model$sim, "matrix")
+ratings_dist <- as(ibcfRec@model$sim, "matrix")
 
 # Visualize similarity matrix
 image(ratings_ibcf@model$sim, 
@@ -275,13 +355,36 @@ image(ratings_ibcf@model$sim,
       ylab = 'Joke Number')
 ```
 
-In the matrix, the score of $0$ represents 1 of 2 things: either the joke is being compared to itself or the two jokes in question are very dissimilar. We can take a look at the distribution of the similarities and see that most items are ranked $0$ or between $0.3$ and $0.4$. 
+In the matrix, the score of $0$ represents 1 of 2 things: either the joke is being compared to itself or the two jokes in question are very dissimilar. We can take a look at the distribution of the similarities and see that most items are ranked $0$ or between $0.5$ and $0.6$. 
 
 ```{r}
 hist(ratings_dist)
 
 ```
 
+### Combining the Similarity Matrices
+Now that we've defined a similarity matrix for the jokes using the IBCF model, we can combine it with the similarity matrix for our defined features. We can identify what weighting works best.  
+  
+```{r}
+
+accList <- c()
+for(i in seq(0,1,0.1)){
+   finalMatrix <- jokeSims * i + ratings_dist * (1 - i)
+   
+   # replace similarity matrix with new matrix
+   ibcfRec@model$sim <- as(finalMatrix, "dgCMatrix")
+   hybridPred <- predict(ibcfRec,getData(evalScheme,'known'), type = 'ratings')
+   hybridAcc <- calcPredictionAccuracy(hybridPred, getData(evalScheme, "unknown"))
+   accList <- rbind(accList, c(i,hybridAcc))
+      
+}
+
+plot(data.frame(accList)$V1, data.frame(accList)$RMSE,
+     main = 'RMSE by Weighting Factor',
+     xlab = 'Weighting Factor',
+     ylab = 'RMSE')
+
+```
 
 ## Evaluation and Selection
 
