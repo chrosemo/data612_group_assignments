@@ -193,8 +193,6 @@ which_train <- sample(x = c(TRUE, FALSE), size = nrow(ratings), replace = TRUE, 
 ratings_train <- ratings[which_train,]
 ratings_test <- ratings[!which_train,]
 ```
-
-
 ```{r}
 # Training IBCF recommender using Jaccard for distance given binary ratings
 ratings_ibcf <- Recommender(data = recc_train, method = "IBCF", parameter = list(method = "Jaccard"))
@@ -204,11 +202,24 @@ model_details <- getModel(recc_model)
 # Visualize similarity matrix
 image(ratings_ibcf@model$sim, main = "Similarity matrix")
 ```
-
 ```{r}
 # Defining a similarity matrix object
 ratings_dist <- as(ratings_ibcf@model$sim, "matrix")
 ```
+
+### Matrix of sentiment scores
+```{r}
+# Binarizing sentiment
+finalJokes$scoreCategory <- ifelse(finalJokes$sentiment > 0, 1, 0)
+
+# Calculating distance using binary sentiment score
+dist_score <- finalJokes[, 1 - dist(finalJokes$scoreCategory == 1)]
+
+# Converting distance object into matrix
+dist_score <- as.matrix(dist_score)
+dim(dist_score)  
+```
+
 
 ## Evaluation and Selection
 
