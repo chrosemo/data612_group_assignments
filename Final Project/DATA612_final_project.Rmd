@@ -38,7 +38,7 @@ We will build a recommender system that predicts Jester users’ joke ratings. W
 The Jester datset 3 will be used in this project. Jester is a joke recommender system developed by the University of California, Berkeley Laboratory of Automation Science and Engineering. The Jester dataset contains millions of joke ratings made by users of the recommender system, which learns from new users. Our chosen dataset (several Jester sets of different sizes are available) initially describes almost 55,000 users making over 1.8 million ratings of 150 different jokes. The Jester team collected these ratings from April 1999 to May 2003 and November 2006 to March 2015. Ratings are real values ranging from -10.00 to +10.00 (the value "99" corresponds to "null" = "not rated"). Each row in the dataset represents a different user, and the first column represents the total number of jokes the individual has rated. The remaining 100 columns give the ratings for each joke. (Learn more about Jester [here](http://eigentaste.berkeley.edu/about.html).) The joke text included in the *jokeText* file will also be used so as to facilitate features engineering.
 
 
-## Data
+## Data Preprocessing
 
 ### Read and prepare data
 
@@ -72,24 +72,59 @@ dim(ratings_working)
 ```
 
 The raw data represents non-rated jokes as the number 99, so we will replace these values with nulls. We'll also create a binary ratings matrix that can be used for our recommender system. A $0$ will represent a negative rating or a joke that hasn't been rated and a $1$ will represent a positively rated joke. 
+
 ```{r}
 # Replacing "99" with NA
 ratings_working[ratings_working == 99] <- NA
 
+ratings_working <- as.matrix(ratings_working)
+
+# Create large dgCMatrix
+finalRatings <- as(ratings_working, 'realRatingMatrix')
+```
+
+## Exploratory Data Analysis of Real Ratings
+
+### Distribution of joke counts
+
+```{r}
+
+jokeCount <- rowCounts(finalRatings)
+hist(jokeCount,
+     main = ' Distribution of Number of Jokes Rated per User',
+     xlab = 'Number of Jokes Rated',
+     ylab = 'Number of Users',
+      col = 'lightblue')
+```
+
+### Average rating across jokes
+```{r}
+mean_rating <- colMeans(finalRatings, na.rm = T)
+plot(quantile(mean_rating), main = 'Quantiles of Average Joke Ratings', type = 'l', col = 'red')
+```
+
+
+### Binarising the ratings
+
+Given that the intended recommender  will hybrid in nature, we decided to binarise the ratings so as to be able to seamlessly integrate it with the outputs of the feature engineering on the raw 'joke texts'.
+
+```{r}
 # Creating binary matrix where positive ratings (> 0) are 1 and all other ratings or NA are 0
-ratings_binary <- as.matrix(ratings_working)
-ratings_binary <- ifelse(is.na(ratings_binary) | ratings_binary <= 0, 0, 1)
+
+ratings_binary <- ifelse(is.na(ratings_working) | ratings_working <= 0, 0, 1)
 
 # Creating binary rating matrix
 ratings <- as(ratings_binary, "binaryRatingMatrix")
 ```
 
-### Exploratory data analysis
-
+### Visualisation of Binarised Ratings
 ```{r}
 # An image of the binary rating matrix
 image(ratings[1:50, 1:50], main = "Viz of Binary Rating Matrix")
 ```
+The visualisation of binarised ratings shows that a number of jokes (represented by the white spaces) were not rated or were rated below 0.
+
+### Number of ratings per joke
 
 ```{r}
 # Depicting the number of ratings per joke
