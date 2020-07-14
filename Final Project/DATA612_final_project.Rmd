@@ -32,7 +32,7 @@ library(tidytext)
 ```
 
 ## Project Goals ****UPDATE TO REFLECT SHIFT TO HYBRID****
-We will build a recommender system that predicts Jester users’ joke ratings. We will use a cloud platform, Databricks Community Edition, for pocessing since the intended dataset to be used is large. Our intended recommender system  will be based on a  hybrid of the content-based approach and IBCF model. Text analysis will be performed on the raw 'jokes text' in order to elicit features that will be used in the design and development of the content based recommender.These features are described in the Joke Text section below. Additionally, a binarised matrix will be  created from jokes ratings from which a IBCF recommender will be developed. We will employ various evaluation methods to select our final model. ****TBC*** "  Are we doing monolithic hybrid? where two approaches are ingtegrated into one algorithm - for example in this case the algorithm takes into account ratings AND item description(its sentiment score)
+We will build a recommender system that predicts Jester users’ joke ratings. We will use a cloud platform, Databricks Community Edition, for processing since the intended dataset to be used is large. Our intended recommender system  will be based on a  hybrid of the content-based approach and IBCF model. Text analysis will be performed on the raw jokes text in order to elicit features that will be used in the design and development of the content based recommender. Additionally, a binarised matrix will be created from jokes ratings from which a IBCF recommender will be developed. We will employ various evaluation methods to select our final model. ****TBC*** "  Are we doing monolithic hybrid? where two approaches are ingtegrated into one algorithm - for example in this case the algorithm takes into account ratings AND item description(its sentiment score)
 
 ## About the Dataset ****APPEND TO REFLECT SHIFT TO HYBRID****
 The Jester datset 3 will be used in this project. Jester is a joke recommender system developed by the University of California, Berkeley Laboratory of Automation Science and Engineering. The Jester dataset contains millions of joke ratings made by users of the recommender system, which learns from new users. Our chosen dataset (several Jester sets of different sizes are available) initially describes almost 55,000 users making over 1.8 million ratings of 150 different jokes. The Jester team collected these ratings from April 1999 to May 2003 and November 2006 to March 2015. Ratings are real values ranging from -10.00 to +10.00 (the value "99" corresponds to "null" = "not rated"). Each row in the dataset represents a different user, and the first column represents the total number of jokes the individual has rated. The remaining 100 columns give the ratings for each joke. (Learn more about Jester [here](http://eigentaste.berkeley.edu/about.html).) The joke text included in the *jokeText* file will also be used so as to facilitate features engineering.
@@ -76,7 +76,6 @@ The raw data represents non-rated jokes as the number 99, so we will replace the
 ```{r}
 # Replacing "99" with NA
 ratings_working[ratings_working == 99] <- NA
-
 ratings_working <- as.matrix(ratings_working)
 
 # Create large dgCMatrix
@@ -110,7 +109,6 @@ Given that the intended recommender  will hybrid in nature, we decided to binari
 
 ```{r}
 # Creating binary matrix where positive ratings (> 0) are 1 and all other ratings or NA are 0
-
 ratings_binary <- ifelse(is.na(ratings_working) | ratings_working <= 0, 0, 1)
 
 # Creating binary rating matrix
@@ -144,7 +142,7 @@ The joke text is included in the *jokeText* file, so we will import this into ou
 * **JOKE_TYPE**: There are 2 general types of jokes - (1) Q&A (ex: Q. What's the difference between a man and a toilet?   A. A toilet doesn't follow you around after you use it.) and (2) story-line jokes (ex: A man visits the doctor. The doctor says "I have bad news for you.You have cancer and Alzheimer's disease".  The man replies "Well,thank God I don't have cancer!) We will classify Q&A jokes as $1$ and story-line jokes as $0$.
 * **JOKE_LENGTH**: The number of words in the joke. 
 * **EXCITED_COUNT**: The number of times an exclamation point is used in a given joke. 
-* **SENTIMENT_SCORE**: We will analyze the general sentiment of the joke using the 
+* **SENTIMENT_SCORE**: We will analyze the general sentiment of the joke using the the lexicon of Bing Liu and collaborators.
 
 ```{r message=FALSE} 
 
@@ -184,7 +182,7 @@ tm::inspect(dtm)
 
 ```
 
-We will transform the *DocumentTermMatrix* into a format that will allow us to analyze the sentiment of each word. We will use the the *get_sentiments()* function, which  looks at the words with a positive score from the lexicon of Bing Liu and collaborators.
+We will transform the *DocumentTermMatrix* into a format that will allow us to analyze the sentiment of each word. We will use the the *get_sentiments()* function, which looks at the words with a positive score from the lexicon of Bing Liu and collaborators.
 ```{r message=FALSE}
 
 # turn it into a one-term-per-document-per-row data frame
@@ -206,7 +204,7 @@ sentPerDoc$document <- as.integer(sentPerDoc$document)
 
 ```
 
-We can now join this to our original jokes dataset to get the positive, negative, and total sentiment scores of each joke. We will replace nulls in jokes where no positive or negative words were found with 0 (neutral).
+We can now join this to our original jokes dataset to get the positive, negative, and total sentiment scores of each joke. We will replace nulls in jokes where no positive or negative words were found with 0 (neutral). We can confirm that the final dataset includes the original features with the sentiment scores. 
 
 ```{r}
 
@@ -217,32 +215,8 @@ colnames(finalJokes)
 
 ```
 
-
-## Recommenders
-
-### IBCF
-
-```{r}
-# Splitting into train/test
-which_train <- sample(x = c(TRUE, FALSE), size = nrow(ratings), replace = TRUE, prob = c(0.8, 0.2))
-ratings_train <- ratings[which_train,]
-ratings_test <- ratings[!which_train,]
-```
-```{r}
-# Training IBCF recommender using Jaccard for distance given binary ratings
-ratings_ibcf <- Recommender(data = recc_train, method = "IBCF", parameter = list(method = "Jaccard"))
-model_details <- getModel(recc_model)
-```
-```{r}
-# Visualize similarity matrix
-image(ratings_ibcf@model$sim, main = "Similarity matrix")
-```
-```{r}
-# Defining a similarity matrix object
-ratings_dist <- as(ratings_ibcf@model$sim, "matrix")
-```
-
-### Matrix of sentiment distance scores
+### Sentiment Distance Scores
+Finally, we'll create a score *category* from the sentiment scores. We'll define 'positive' as anything with a score > 0 and all others as 'non-positive'. We'll then create a matrix of sentiment distance scores - 1 will represent 
 ```{r}
 # Binarizing sentiment
 finalJokes$scoreCategory <- ifelse(finalJokes$sentiment > 0, "positive", "non-positive")
@@ -254,6 +228,58 @@ dist_score <- finalJokesTable[, 1 - dist(finalJokesTable$scoreCategory == "posit
 # Converting distance object into matrix
 dist_score <- as.matrix(dist_score)
 dim(dist_score)  
+```
+
+
+## Recommenders
+Our final, hybrid model combines (1) item-based collaborative filtering with (2) the constructed features from the joke text. Each piece will be built out separately and later combined to create the final prediction. The process for building this model is based on Chapter 5 of the course text. 
+
+
+### Train-Test Split
+First, we will split the *binaryRatingMatrix* into training and test sets. The training set will be used to build the model and the test set will be used to calculate the accuracy of predictions. 
+
+```{r}
+# Splitting into train/test
+which_train <- sample(x = c(TRUE, FALSE), 
+                      size = nrow(ratings), 
+                      replace = TRUE, 
+                      prob = c(0.8, 0.2))
+
+ratings_train <- ratings[which_train,]
+ratings_test <- ratings[!which_train,]
+```
+
+### IBCF
+
+Now we can build our initial item-based recommender. We will use Jaccard for distance given binary ratings. 
+
+```{r}
+# Training IBCF recommender using Jaccard for distance given binary ratings
+ratings_ibcf <- Recommender(data = ratings_train, 
+                            method = "IBCF", 
+                            parameter = list(method = "Jaccard"))
+
+model_details <- getModel(ratings_ibcf)
+```
+
+We'll define a similarity matrix for the jokes, which will give us an idea of how similar jokes are to each other. This matrix is based on the rated jokes -- the more users that rate the jokes positively together, the more similar they are. We can visualise this matrix as well -- the darker colored squares represent jokes that are similar. 
+
+```{r}
+# Defining a similarity matrix object
+ratings_dist <- as(ratings_ibcf@model$sim, "matrix")
+
+# Visualize similarity matrix
+image(ratings_ibcf@model$sim, 
+      main = "Similarity matrix",
+      xlab = 'Joke Number',
+      ylab = 'Joke Number')
+```
+
+In the matrix, the score of $0$ represents 1 of 2 things: either the joke is being compared to itself or the two jokes in question are very dissimilar. We can take a look at the distribution of the similarities and see that most items are ranked $0$ or between $0.3$ and $0.4$. 
+
+```{r}
+hist(ratings_dist)
+
 ```
 
 
