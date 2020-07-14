@@ -104,7 +104,7 @@ plot(quantile(mean_rating), main = 'Quantiles of Average Joke Ratings', type = '
 ```
 
 
-### Binarising the ratings
+## Binarising the ratings
 
 Given that the intended recommender  will hybrid in nature, we decided to binarise the ratings so as to be able to seamlessly integrate it with the outputs of the feature engineering on the raw 'joke texts'.
 
