@@ -87,9 +87,14 @@ ratings <- as(ratings_binary, "binaryRatingMatrix")
 ### Exploratory data analysis
 
 ```{r}
-
+# An image of the binary rating matrix
 image(ratings[1:50, 1:50], main = "Viz of Binary Rating Matrix")
+```
 
+```{r}
+# Depicting the number of ratings per joke
+n_ratings <- colCounts(ratings)
+hist(n_ratings, main = "Number of ratings per joke")
 ```
 
 ## Feature Engineering to support content-based approach
@@ -196,7 +201,12 @@ ratings_ibcf <- Recommender(data = recc_train, method = "IBCF", parameter = list
 model_details <- getModel(recc_model)
 ```
 ```{r}
-# Defining a ratings similarity matrix
+# Visualize similarity matrix
+image(ratings_ibcf@model$sim, main = "Similarity matrix")
+```
+
+```{r}
+# Defining a similarity matrix object
 ratings_dist <- as(ratings_ibcf@model$sim, "matrix")
 ```
 
