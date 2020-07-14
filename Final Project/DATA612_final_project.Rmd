@@ -207,13 +207,14 @@ image(ratings_ibcf@model$sim, main = "Similarity matrix")
 ratings_dist <- as(ratings_ibcf@model$sim, "matrix")
 ```
 
-### Matrix of sentiment scores
+### Matrix of sentiment distance scores
 ```{r}
 # Binarizing sentiment
-finalJokes$scoreCategory <- ifelse(finalJokes$sentiment > 0, 1, 0)
+finalJokes$scoreCategory <- ifelse(finalJokes$sentiment > 0, "positive", "non-positive")
 
 # Calculating distance using binary sentiment score
-dist_score <- finalJokes[, 1 - dist(finalJokes$scoreCategory == 1)]
+finalJokesTable <- data.table::as.data.table(finalJokes)
+dist_score <- finalJokesTable[, 1 - dist(finalJokesTable$scoreCategory == "positive")]
 
 # Converting distance object into matrix
 dist_score <- as.matrix(dist_score)
