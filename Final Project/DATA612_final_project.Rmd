@@ -22,19 +22,17 @@ library(readxl)
 library(sparklyr)
 library(recommenderlab)
 
-#library(stringr)
 library(tm)
 library(tidyr)
 library(tidytext)
-
-# install a local version of Spark for development purposes
-# spark_install()
 ```
 
-## Project Goals ****UPDATE TO REFLECT SHIFT TO HYBRID****
-We will build a recommender system that predicts Jester users’ joke ratings. We will use a cloud platform, Databricks Community Edition, for processing since the intended dataset to be used is large. Our intended recommender system  will be based on a  hybrid of the content-based approach and IBCF model. Text analysis will be performed on the raw jokes text in order to elicit features that will be used in the design and development of the content based recommender. Additionally, a binarised matrix will be created from jokes ratings from which a IBCF recommender will be developed. We will employ various evaluation methods to select our final model. ****TBC*** "  Are we doing monolithic hybrid? where two approaches are ingtegrated into one algorithm - for example in this case the algorithm takes into account ratings AND item description(its sentiment score)
+## Project Goals & Methodology 
 
-## About the Dataset ****APPEND TO REFLECT SHIFT TO HYBRID****
+The overall goal of this project is to build a recommender system that predicts joke ratings. Although we initially aimed to use spark on databricks, we ran into a number of challenges that prevented us from continuing. Instead, we have chosen to create a recommender that is based on a more advanced technique. We will use a monolothic hybrid approach, whereby two recommender methods are integrated to produce a final model. The first model will be the traditional Item-based collaborative filtering approach; each user will be recommended jokes that are similar to the ones they've already rated. The second model will be be based purely on joke characteristics; we will extract information from the joke text (ex: type of joke, length of joke) to create novel features. The end model will be a weighted combination of the similarity matrices from both models. We also tackle the "cold start" problem in which a user has not rated any jokes previously by incorporating a function to recommend the top n rated jokes from the dataset.   
+
+
+## About the Dataset 
 The Jester datset 3 will be used in this project. Jester is a joke recommender system developed by the University of California, Berkeley Laboratory of Automation Science and Engineering. The Jester dataset contains millions of joke ratings made by users of the recommender system, which learns from new users. Our chosen dataset (several Jester sets of different sizes are available) initially describes almost 55,000 users making over 1.8 million ratings of 150 different jokes. The Jester team collected these ratings from April 1999 to May 2003 and November 2006 to March 2015. Ratings are real values ranging from -10.00 to +10.00 (the value "99" corresponds to "null" = "not rated"). Each row in the dataset represents a different user, and the first column represents the total number of jokes the individual has rated. The remaining 100 columns give the ratings for each joke. (Learn more about Jester [here](http://eigentaste.berkeley.edu/about.html).) The joke text included in the *jokeText* file will also be used so as to facilitate features engineering.
 
 
@@ -42,8 +40,8 @@ The Jester datset 3 will be used in this project. Jester is a joke recommender s
 
 ### Read and prepare data
 
-First, we will load in the jester data set. We can see from this that we have $54,905$ users and $150$ jokes (plus one column for the rated joke count).
-```{r}
+First, we will load in the jester data set. We can see from the extraction that we have $54,905$ users and $150$ jokes (plus one column for the rated joke count).
+```{r message=FALSE}
 # Downloading ratings data to tempfile
 dl <- tempfile()
 download.file("http://eigentaste.berkeley.edu/dataset/JesterDataset3.zip", dl)
@@ -71,21 +69,22 @@ ratings_working[, retired] <- list(NULL)
 dim(ratings_working)
 ```
 
-The raw data represents non-rated jokes as the number 99, so we will replace these values with nulls. We'll also create a binary ratings matrix that can be used for our recommender system. A $0$ will represent a negative rating or a joke that hasn't been rated and a $1$ will represent a positively rated joke. 
+The raw data represents non-rated jokes as the number 99, so we will replace these values with nulls. We'll also create a large ratings matrix to be used in our IBCF model. 
 
 ```{r}
 # Replacing "99" with NA
 ratings_working[ratings_working == 99] <- NA
 ratings_working <- as.matrix(ratings_working)
 
-# Create large dgCMatrix
+# Create realRatingMatrix
 finalRatings <- as(ratings_working, 'realRatingMatrix')
 ```
 
 ## Exploratory Data Analysis of Real Ratings
+We can now dive a bit deeper into the ratings data. 
 
 ### Distribution of joke counts
-
+First, let's take a look at the number of jokes that each user has rated. The distribution is left skewed, which means that only a few users have rated a lot of the jokes. 
 ```{r}
 
 jokeCount <- rowCounts(finalRatings)
@@ -97,41 +96,18 @@ hist(jokeCount,
 ```
 
 ### Average rating across jokes
+We can also look at the average rating for the jokes. We can see from the histogram that the mean rating is below 4 for all jokes. 
 ```{r}
 mean_rating <- colMeans(finalRatings, na.rm = T)
-plot(quantile(mean_rating), main = 'Quantiles of Average Joke Ratings', type = 'l', col = 'red')
+hist(mean_rating,
+     main = 'Distribution of joke ratings',
+     xlab = 'Average Rating',
+     ylab = 'Number of users')
 ```
 
 
-## Binarising the ratings
-
-Given that the intended recommender  will hybrid in nature, we decided to binarise the ratings so as to be able to seamlessly integrate it with the outputs of the feature engineering on the raw 'joke texts'.
-
-```{r}
-# Creating binary matrix where positive ratings (> 0) are 1 and all other ratings or NA are 0
-ratings_binary <- ifelse(is.na(ratings_working) | ratings_working <= 0, 0, 1)
-
-# Creating binary rating matrix
-ratings <- as(ratings_binary, "binaryRatingMatrix")
-```
-
-### Visualisation of Binarised Ratings
-```{r}
-# An image of the binary rating matrix
-image(ratings[1:50, 1:50], main = "Viz of Binary Rating Matrix")
-```
-The visualisation of binarised ratings shows that a number of jokes (represented by the white spaces) were not rated or were rated below 0.
-
-### Number of ratings per joke
-
-```{r}
-# Depicting the number of ratings per joke
-n_ratings <- colCounts(ratings)
-hist(n_ratings, main = "Number of ratings per joke")
-```
-
-## Feature Engineering to support content-based approach
-The first thing we will do is create features for our jokes. We will base our feature development on research by Rada Mihalcea and Stephen Pulman.
+## Joke Text Feature Engineering 
+ We will base our joke features on research by Rada Mihalcea and Stephen Pulman.
 
 ### Joke Characteristics
 
@@ -173,9 +149,6 @@ To analyze the joke sentiment, we'll create a corpus for our joke text using the
   
 When we inspect the first few elements of the *DocumentTermMatrix*, we can see that it is very sparse: 99% of the counts are 0. This means that there are not a lot of common words used in all jokes.
 ```{r}
-# https://cran.r-project.org/web/packages/tm/vignettes/tm.pdf  
-# https://cran.r-project.org/web/packages/tidytext/vignettes/tidying_casting.html
-
 # create a corpus of words in the text
 jokeCorpus <- VCorpus(VectorSource(jokeText$JOKE_TEXT))
 
@@ -191,7 +164,7 @@ tm::inspect(dtm)
 
 ```
 
-We will transform the *DocumentTermMatrix* into a format that will allow us to analyze the sentiment of each word. We will use the the *get_sentiments()* function, which looks at the words with a positive score from the lexicon of Bing Liu and collaborators.
+We will transform the *DocumentTermMatrix* into a format that will allow us to analyze the sentiment of each word. We can use the the *get_sentiments()* function, which looks at the words with a positive score from the lexicon of Bing Liu and collaborators.
 ```{r message=FALSE}
 
 # turn it into a one-term-per-document-per-row data frame
@@ -229,23 +202,11 @@ colnames(finalJokes)
 ```
 
 ### Feature Similarity Matrix
+
 Finally, we can create a similarity matrix for our data based on all of the features we've defined. The higher the score, the more similar the two jokes are. 
 ```{r}
-# Binarizing sentiment
-#finalJokes$scoreCategory <- ifelse(finalJokes$sentiment > 0, "positive", "non-positive")
-
-# Calculating distance using binary sentiment score
-#finalJokesTable <- data.table::as.data.table(finalJokes)
-#dist_score <- finalJokesTable[, 1 - dist(finalJokesTable$scoreCategory == "positive")]
-
-# Converting distance object into matrix
-#dist_score <- as.matrix(dist_score)
-#dim(dist_score)  
-
 jokeFeatures <- finalJokes %>% 
    select(JOKE_TYPE, JOKE_LENGTH, EXCITED_COUNT, SENTIMENT_SCORE, POSITIVE_SCORE, NEGATIVE_SCORE, SCORE_CATEGORY) 
-
-#method = c("cosine", "correlation",  "jaccard", "ejaccard", "dice", "edice", #"hamman","simple matching",  "faith")
 
 jokeSims <- as.matrix(simil(jokeFeatures))
 
@@ -303,48 +264,6 @@ nRecs <- c(1, seq(3, 20, 1))
 finalResults <- evaluate(x = evalScheme, method = evalModels, n = nRecs)
 ```
 
-### Incorporating Bias
-```{r}
-
-train_matrix <- as(getData(evalScheme, "train"), "matrix")
-test_matrix <- as(getData(evalScheme,"known"), "matrix")
-
-# average for training set
-raw_avg <- mean(train_matrix, na.rm =TRUE)
-
-# calculate bias for each user and each movie 
-user_bias <- rowMeans(train_matrix, na.rm = TRUE) - raw_avg
-item_bias <- colMeans(train_matrix, na.rm = TRUE) - raw_avg
-
-# Applying baseline predictor function to each user-item combination of train_matrix
-blp <- function(x,y){x + y + raw_avg}
-
-baseline_predictor <- data.frame(
-  sapply(1:length(item_bias), function(i) sapply(1:length(user_bias), function(j) blp(user_bias[j], item_bias[i]))), row.names = rownames(train_matrix))
-
-names(baseline_predictor) <- rownames(train_matrix)
-colnames(baseline_predictor) <- colnames(train_matrix)
-
-# Clipping max and min values
-baseline_predictor[baseline_predictor > 10] <- 10
-baseline_predictor[baseline_predictor < -10] <- -10
-
-#################### testing set
-baseline_predictor_test <- data.frame(
-  t(sapply(rownames(test_matrix), 
-           function(i) sapply(rownames(test_matrix), 
-                              function(j) blp(user_bias[i], item_bias[j])
-                              ))))
-
-names(baseline_predictor_test) <- rownames(test_matrix)
-colnames(baseline_predictor_test) <- colnames(test_matrix)
-
-# Clipping max and min values
-baseline_predictor_test[baseline_predictor_test > 10] <- 10
-baseline_predictor_test[baseline_predictor_test < -10] <- -10
-
-```
-
 We can see from the plot of the final results that the IBCF model with the pearson similarity works best. 
 ```{r}
 plot(finalResults, annotate = 1, legend = "topleft")
@@ -357,15 +276,6 @@ ibcfRec <- Recommender(getData(evalScheme, "train"), 'IBCF', parameter = list(me
 
 ibcfPred <- predict(ibcfRec,getData(evalScheme,'known'), type = 'ratings')
 ibcfAcc <- calcPredictionAccuracy(ibcfPred, getData(evalScheme, "unknown"))
-
-#################################################
-# Training IBCF recommender using Jaccard for distance given binary ratings
-# ratings_ibcf <- Recommender(data = ratings_train, 
-#                             method = "IBCF", 
-#                             parameter = list(method = "Jaccard"))
-# 
-# model_details <- getModel(ratings_ibcf)
-
 
 ```
 
@@ -406,21 +316,102 @@ for(i in seq(0,1,0.1)){
       
 }
 
+```
+
+We can see from the RMSE comparison that the best combination of IBCF / derived features is 70% / 30%. We will use this to make our final model, which will recommend the top 5 jokes per user. 
+
+```{r}
+
 plot(data.frame(accList)$V1, data.frame(accList)$RMSE,
      main = 'RMSE by Weighting Factor',
      xlab = 'Weighting Factor',
      ylab = 'RMSE')
 
+finalMatrix <- jokeSims * 0.3 + ratings_dist * (1 - 0.3)
+   
+# replace similarity matrix with new matrix
+ibcfRec@model$sim <- as(finalMatrix, "dgCMatrix")
+
 ```
 
-## Evaluation and Selection
+## Cold Start Problem
+Because our model is based on items that are similar in nature, we need a user profile for it to recommend new jokes. This is a problem when we are presented with a user that has not rated any jokes. To deal with this problem we will recommend the top $n$ rated jokes as a default. 
+  
+First, we can calculate the top 5 rated jokes from the dataset. 
+
+```{r}
+
+meanRatings <- data.frame(colMeans(ratings_working, na.rm=TRUE))
+colnames(meanRatings) <- c('MEAN_RATING')
+meanRatings$JOKE_NUM <- rownames(meanRatings)
+
+top5 <- meanRatings %>%
+   arrange(desc(MEAN_RATING)) %>%
+   top_n(n=5, wt =MEAN_RATING) %>%
+   select(JOKE_NUM)
+
+top5$JOKE_NUM <- as.integer(top5$JOKE_NUM)
+top5.ls <- as.list(top5)
+top5.ls
+
+```
+
+Next, we'll create a function to calculate the predictions - if the number of ratings for the user profile is 0, the default predictions will be the top 5 jokes. Otherwise, the predictions will be based on the user's rated items. 
+
+```{r}
+
+finalRecs <- function(profile){
+   colCounts <- max(colCounts(profile))
+   if(colCounts == 0){
+      finalJokes <- top5.ls
+   } else{
+      preds <- predict(ibcfRec,
+        profile, 
+        n = 5)
+      finalJokes <- preds@items
+   }
+   return(finalJokes)
+}
+
+```
+
+Finally, we can test this out with 2 test users - one that has no ratings and one that has a few ratings. We can verify that the output for no users is the same as the top 10 jokes. 
+```{r}
+testUser <- matrix(data = rep(NA,128),
+                   nrow = 1)
+colnames(testUser) <- colnames(finalRatings)
+rownames(testUser) <- 1111111
+testUser.rm <- as(testUser, 'realRatingMatrix')
+
+finalRecs(testUser.rm) 
+top5.ls
+
+```
+
+And we can also see what jokes are recommended to a user that has recommended jokes: 
+
+```{r}
+
+testUser2 <- getData(evalScheme,'known')[1]
+finalRecs(testUser2) 
+
+```
+
 
 ## Conclusion
+
+### Summary of Results
+Our final recommender model incorporates item-based similarities from both a traditional IBCF technique and a derived similarity matrix using joke text features. We performed a pseudo grid search to identify the optimal parameters to use in our IBCF model, with the pearson similarity winning out. We were able to extract relevant features from the joke text that ultimately resulted in a superior model than using IBCF alone. The final model was developed based on an analysis of weightings to identify the best combination of feature/IBCF weightings. Finally, we were able to overcome the "cold start" problem by incorporating average joke ratings for new users with no previously rated jokes. 
+
+### Challenges with Implementation
+Our biggest challenge with this project was the lack of support for recommender packages using R. We had a stretch goal of using both an advanced approach (a self-developed hybrid system) AND deploying using spark, but this wasn't feasible with the language we chose to use. This is why we ultimately decided to run the entire recommender locally, but increase complexity by tackling the "cold start" problem.
+
+### Future Work
+Our final RMSE of over 4 leaves a lot of room for improvement with this system. Incorporating user and item bias in the model might help to improve our scores. Additionally, we would like to play with different "cold start" techniques - we used the average rating for a joke to determine the recommended items for new users with no profiles, but this could potentially be replaced/combined with popular jokes and median joke ratings. Finally, and most importantly, we think that porting the entire analysis to pyspark compatible libraries would likely (1) increase final accuracy and (2) increase computation time. 
 
 ## Sources
 
 * Mihalcea, Rada, and Stephen Pulman. “Characterizing Humour: An Exploration of Features in Humorous Texts.” Computational Linguistics and Intelligent Text Processing Lecture Notes in Computer Science, 2007, pp. 337–347., doi:10.1007/978-3-540-70939-8_30.
 
 * Usuelli, M., & Gorakala, S. K. (2015). Building a Recommendation System with R. Packt Publishing Limited.
-***ADD COURSE TEXT***
 
