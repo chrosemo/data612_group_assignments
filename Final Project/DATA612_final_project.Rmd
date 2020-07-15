@@ -259,7 +259,7 @@ We can also take a look the distribution of similarity scores and see that it is
 
 hist(jokeSims,
      main = 'Distribution of similarity scores',
-     xlab = 'Similarty Score',
+     xlab = 'Similarity Score',
      ylab = 'Number of Scores')
 
 ```
@@ -268,23 +268,9 @@ hist(jokeSims,
 Our final, hybrid model combines (1) item-based collaborative filtering with (2) the constructed features from the joke text. Each piece will be built out separately and later combined to create the final prediction. The process for building this model is based on Chapter 5 of the course text. 
 
 
-### Train-Test Split
-First, we will split the ratings matrix into training and test sets. The training set will be used to build the model and the test set will be used to calculate the accuracy of predictions. 
-
-```{r}
-# Splitting into train/test
-which_train <- sample(x = c(TRUE, FALSE), 
-                      size = nrow(finalRatings), #ratings
-                      replace = TRUE, 
-                      prob = c(0.8, 0.2))
-
-ratings_train <- finalRatings[which_train,]
-ratings_test <- finalRatings[!which_train,]
-```
-
 ### IBCF
 
-Now we can build our initial item-based recommender. We'll define the following: 
+First, we can build our initial item-based recommender. We'll define the following: 
 
 * **Training Percent:** The percent of the data that should be used in training. The remaining data will be used for testing.
 * **Items To Keep:** The total number of items that will be used to generate the recommendations. The remaining items will be used to test the model accuracy. We'll identify the min number of jokes that an individual has rated and use a few less than that. 
@@ -317,6 +303,47 @@ nRecs <- c(1, seq(3, 20, 1))
 finalResults <- evaluate(x = evalScheme, method = evalModels, n = nRecs)
 ```
 
+### Incorporating Bias
+```{r}
+
+train_matrix <- as(getData(evalScheme, "train"), "matrix")
+test_matrix <- as(getData(evalScheme,"known"), "matrix")
+
+# average for training set
+raw_avg <- mean(train_matrix, na.rm =TRUE)
+
+# calculate bias for each user and each movie 
+user_bias <- rowMeans(train_matrix, na.rm = TRUE) - raw_avg
+item_bias <- colMeans(train_matrix, na.rm = TRUE) - raw_avg
+
+# Applying baseline predictor function to each user-item combination of train_matrix
+blp <- function(x,y){x + y + raw_avg}
+
+baseline_predictor <- data.frame(
+  sapply(1:length(item_bias), function(i) sapply(1:length(user_bias), function(j) blp(user_bias[j], item_bias[i]))), row.names = rownames(train_matrix))
+
+names(baseline_predictor) <- rownames(train_matrix)
+colnames(baseline_predictor) <- colnames(train_matrix)
+
+# Clipping max and min values
+baseline_predictor[baseline_predictor > 10] <- 10
+baseline_predictor[baseline_predictor < -10] <- -10
+
+#################### testing set
+baseline_predictor_test <- data.frame(
+  t(sapply(rownames(test_matrix), 
+           function(i) sapply(rownames(test_matrix), 
+                              function(j) blp(user_bias[i], item_bias[j])
+                              ))))
+
+names(baseline_predictor_test) <- rownames(test_matrix)
+colnames(baseline_predictor_test) <- colnames(test_matrix)
+
+# Clipping max and min values
+baseline_predictor_test[baseline_predictor_test > 10] <- 10
+baseline_predictor_test[baseline_predictor_test < -10] <- -10
+
+```
 
 We can see from the plot of the final results that the IBCF model with the pearson similarity works best. 
 ```{r}
@@ -349,7 +376,7 @@ We'll define a similarity matrix for the jokes, which will give us an idea of ho
 ratings_dist <- as(ibcfRec@model$sim, "matrix")
 
 # Visualize similarity matrix
-image(ratings_ibcf@model$sim, 
+image(ibcfRec@model$sim, 
       main = "Similarity matrix",
       xlab = 'Joke Number',
       ylab = 'Joke Number')
